@@ -11,7 +11,7 @@ export KSEq,
        reconstruct,
        𝒦,
        inner,
-       jacobian
+       ∂ₓ, ∂ᵥ
 
 immutable KSEq
     ν::Float64
@@ -88,6 +88,26 @@ function call(ksJ::KSStateJacobian,
     end
     J
 end
+
+immutable KSParamJacobian
+    ks::KSEq
+end
+∂ᵥ(ks!::KSEq) = KSParamJacobian(ks!)
+
+function call(ksJ::KSParamJacobian, 
+              J::AbstractMatrix, 
+              x::AbstractVector, 
+              v::AbstractVector)
+    N = ksJ.ks.N
+    for k = 1:N 
+        fk = Refk(k)
+        for p = 1:N 
+            @inbounds J[k, p] = fk*x[p]
+        end
+    end
+    J
+end
+
 
 # ~~~ Reconstruction functions ~~~
 
