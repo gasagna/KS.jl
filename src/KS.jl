@@ -158,7 +158,7 @@ function inner(ks::KSEq, x::AbstractVector, y::AbstractVector)
     @simd for k in 1:ks.Nₓ
         @inbounds s += x[k]*y[k]
     end
-    2*s
+    s
 end
 
 norm(ks::KSEq, x::AbstractVector) = sqrt(inner(ks, x, x))
