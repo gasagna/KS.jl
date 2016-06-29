@@ -62,16 +62,16 @@ function call{T<:Number}(ks!::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T}
 end
 
 # ~~~ Jacobian of the system ~~~
-immutable KSJacobian
+immutable KSStateJacobian
     ks::KSEq
 end
+∂ₓ(ks!::KSEq) = KSStateJacobian(ks!)
 
-jacobian(ks!::KSEq) = KSJacobian(ks!)
-
-function call{T<:Number}(ksJ::KSJacobian, 
-                         J::AbstractMatrix{T}, 
-                         x::AbstractVector{T})
-    J[:] = zero(T)
+function call(ksJ::KSStateJacobian, 
+              J::AbstractMatrix, 
+              x::AbstractVector, 
+              v::AbstractVector)
+    J[:] = zero(eltype(J))
     ν, N = ksJ.ks.ν, ksJ.ks.N
     for k = 1:N # linear term
         @inbounds J[k, k] = k*k*(1 - ν*k*k)
@@ -79,6 +79,12 @@ function call{T<:Number}(ksJ::KSJacobian,
     for p = 1:N, k = 1:N # nonlinear term
         k != p   && @inbounds J[k, p] += -2*k*x[abs(k-p)]*sign(k-p) 
         k+p <= N && @inbounds J[k, p] +=  2*k*x[k+p]
+    end
+    for k = 1:N # control term
+        fk = Refk(k)
+        for p = 1:N 
+            @inbounds J[k, p] += fk*v[p]
+        end
     end
     J
 end
