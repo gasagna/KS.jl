@@ -79,7 +79,7 @@ function call(ksJ::KSStateJacobian,
               v::AbstractVector)
     @checkJacdimension
     J[:] = zero(eltype(J))
-    ν, Nₓ = ksJ.ksν, ksJ.ksN
+    ν, Nₓ = ksJ.ks.ν, ksJ.ks.Nₓ
     for k = 1:Nₓ # linear term
         @inbounds J[k, k] = k*k*(1 - ν*k*k)
     end
@@ -106,10 +106,10 @@ function call(ksJ::KSParamJacobian,
               x::AbstractVector, 
               v::AbstractVector)
     @checkJacdimension
-    Nₓ = ksJ.ksN
+    Nₓ = ksJ.ks.Nₓ
     for k = 1:Nₓ 
         fk = Refk(k)
-        for p = 1:Nₓ 
+        for p = 1:length(v) 
             @inbounds J[k, p] = fk*x[p]
         end
     end
