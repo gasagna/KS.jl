@@ -44,9 +44,21 @@ end
 
 @inline Refk(k::Integer, xf=π/2) = - sin(k*xf)/2π
 
-function call{T<:Number}(ks!::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T})
+function 𝒞!{T<:Number}(ks!::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T}, v::AbstractVector)
+    u = x⋅v # control input
+    @simd for k = 1:ks!.N
+        @inbounds ẋ[k] += Refk(k)*u
+    end
+    ẋ
+end
+
+function call{T<:Number}(ks!::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T}, v::AbstractVector)
     @assert length(x) == length(ẋ) == length(x) == ks!.N
-    𝒩!(ks!, ℒ!(ks!, fill!(ẋ, zero(T)), x), x)
+    # use new julia function composition syntax
+    fill!(ẋ, zero(T))
+    ℒ!(ks!, ẋ, x)
+    𝒩!(ks!, ẋ, x)
+    𝒞!(ks!, ẋ, x, v)
 end
 
 # ~~~ Jacobian of the system ~~~
