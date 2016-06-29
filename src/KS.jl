@@ -42,7 +42,7 @@ function ℒ!{T<:Number}(ks!::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T}
     ẋ
 end
 
-@inline Refk(k::Integer, xf=π/2) = - sin(k*xf)/2π
+@inline Refk(k::Integer) = - sin(k*π/2)/2π
 
 function 𝒞!{T<:Number}(ks!::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T}, v::AbstractVector)
     u = x⋅v # control input
