@@ -63,7 +63,7 @@ end
 
 # ~~~ Jacobian of the system ~~~
 immutable KSStateJacobian
-    ks:KSEq
+    ks::KSEq
 end
 ∂ₓ(ks::KSEq) = KSStateJacobian(ks)
 
@@ -90,7 +90,7 @@ function call(ksJ::KSStateJacobian,
 end
 
 immutable KSParamJacobian
-    ks:KSEq
+    ks::KSEq
 end
 ∂ᵥ(ks::KSEq) = KSParamJacobian(ks)
 
