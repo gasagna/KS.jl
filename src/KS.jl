@@ -42,7 +42,7 @@ function ℒ!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector)
     ẋ
 end
 
-@inline Refk(k::Integer) = - sin(k*π/2)/2π
+@inline Refk(k::Integer) = -sin(k*π/2)/2π
 
 function 𝒞!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector, v::AbstractVector)
     u = x⋅v # control input
