@@ -62,7 +62,7 @@ function call(ks::KSEq, ẋ::AbstractVector, x::AbstractVector, v::AbstractVecto
 end
 
 # ~~~ Jacobian of the system ~~~
-macro checkJacdimension
+macro checkJacdimension()
     :(size(J) == (length(x), length(v)) || 
         throw(ArgumentError("Wrong input dimension. Got J->$(size(J)), " * 
             "x->$(length(x)), v->$(length(v))")))
