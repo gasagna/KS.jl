@@ -15,16 +15,16 @@ export KSEq,
 
 immutable KSEq
     ν::Float64
-    N::Int64
+    Nₓ::Int64
 end
 
-ndofs(ks::KSEq) = ks.N
+ndofs(ks::KSEq) = ks.Nₓ
 
 function 𝒩!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector)
-    N = ks.N
-    for k = 1:N
+    Nₓ = ks.Nₓ
+    for k = 1:Nₓ
         s = zero(eltype(x))
-        for m = max(-N, k-N):min(N, k+N)
+        for m = max(-Nₓ, k-Nₓ):min(Nₓ, k+Nₓ)
             if !(k-m == 0 || m == 0)
                 @inbounds s += x[abs(m)]*x[abs(k-m)]*sign(m)*sign(k-m)
             end
@@ -35,8 +35,8 @@ function 𝒩!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector)
 end
 
 function ℒ!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector)
-    ν, N = ks.ν, ks.N
-    @simd for k = 1:N
+    ν, Nₓ = ks.ν, ks.Nₓ
+    @simd for k = 1:Nₓ
         @inbounds ẋ[k] += k*k*(1-ν*k*k)*x[k]
     end
     ẋ
@@ -46,14 +46,14 @@ end
 
 function 𝒞!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector, v::AbstractVector)
     u = x⋅v # control input
-    @simd for k = 1:ks.N
+    @simd for k = 1:ks.Nₓ
         @inbounds ẋ[k] += Refk(k)*u
     end
     ẋ
 end
 
 function call(ks::KSEq, ẋ::AbstractVector, x::AbstractVector, v::AbstractVector)
-    @assert length(x) == length(ẋ) == length(x) == ks.N
+    @assert length(x) == length(ẋ) == length(x) == ks.Nₓ
     # use new julia function composition syntax
     fill!(ẋ, zero(eltype(ẋ)))
     ℒ!(ks, ẋ, x)
@@ -79,17 +79,17 @@ function call(ksJ::KSStateJacobian,
               v::AbstractVector)
     @checkJacdimension
     J[:] = zero(eltype(J))
-    ν, N = ksJ.ksν, ksJ.ksN
-    for k = 1:N # linear term
+    ν, Nₓ = ksJ.ksν, ksJ.ksN
+    for k = 1:Nₓ # linear term
         @inbounds J[k, k] = k*k*(1 - ν*k*k)
     end
-    for p = 1:N, k = 1:N # nonlinear term
+    for p = 1:Nₓ, k = 1:Nₓ # nonlinear term
         k != p   && @inbounds J[k, p] += -2*k*x[abs(k-p)]*sign(k-p) 
-        k+p <= N && @inbounds J[k, p] +=  2*k*x[k+p]
+        k+p <= Nₓ && @inbounds J[k, p] +=  2*k*x[k+p]
     end
-    for k = 1:N # control term
+    for k = 1:Nₓ # control term
         fk = Refk(k)
-        for p = 1:N 
+        for p = 1:Nₓ 
             @inbounds J[k, p] += fk*v[p]
         end
     end
@@ -106,10 +106,10 @@ function call(ksJ::KSParamJacobian,
               x::AbstractVector, 
               v::AbstractVector)
     @checkJacdimension
-    N = ksJ.ksN
-    for k = 1:N 
+    Nₓ = ksJ.ksN
+    for k = 1:Nₓ 
         fk = Refk(k)
-        for p = 1:N 
+        for p = 1:Nₓ 
             @inbounds J[k, p] = fk*x[p]
         end
     end
@@ -123,7 +123,7 @@ function reconstruct!(ks::KSEq,           # the system
                       x::AbstractVector,  # state vector
                       xg::AbstractVector, # the grid
                       u::AbstractVector)  # output
-    ν, N = ks.ν, ks.N
+    ν, Nₓ = ks.ν, ks.Nₓ
     u[:] = 0
     @inbounds for k = 1:length(x)
         xk = x[k]
@@ -153,9 +153,9 @@ reconstruct(ks::KSEq, x::AbstractMatrix, xg::AbstractVector) =
 # ~~~ inner product, norm, energy and the like ~~~
 
 function inner(ks::KSEq, x::AbstractVector, y::AbstractVector)
-    @assert length(x) == length(y) == ks.N
+    @assert length(x) == length(y) == ks.Nₓ
     s = zero(promote_type(eltype(x), eltype(y)))
-    @simd for k in 1:ks.N
+    @simd for k in 1:ks.Nₓ
         @inbounds s += x[k]*y[k]
     end
     2*s
