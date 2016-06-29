@@ -42,6 +42,8 @@ function ℒ!{T<:Number}(ks!::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T}
     ẋ
 end
 
+@inline Refk(k::Integer, xf=π/2) = - sin(k*xf)/2π
+
 function call{T<:Number}(ks!::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T})
     @assert length(x) == length(ẋ) == length(x) == ks!.N
     𝒩!(ks!, ℒ!(ks!, fill!(ẋ, zero(T)), x), x)
