@@ -89,7 +89,7 @@ function call(ksJ::KSStateJacobian,
     end
     for k = 1:Nₓ # control term
         fk = Refk(k)
-        for p = 1:Nₓ 
+        for p = 1:length(v)
             @inbounds J[k, p] += fk*v[p]
         end
     end
