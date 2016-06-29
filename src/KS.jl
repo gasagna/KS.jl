@@ -128,7 +128,7 @@ function reconstruct!(ks::KSEq,           # the system
     @inbounds for k = 1:length(x)
         xk = x[k]
         @simd for i = 1:length(xg)
-            u[i] += 2*xk*sin(k*xg[i])
+            u[i] -= 2*xk*sin(k*xg[i])
         end
     end
     u

@@ -25,7 +25,8 @@ let
     x = [5.0, -2.0, 4.0] 
     grid = linspace(0, 2π, 10)
     u = reconstruct!(ks, x, grid, similar(grid))
-    @test u ≈ 2*(5*sin(1*grid) - 
+    # note the minus
+    @test u ≈ -2*(5*sin(1*grid) - 
                  2*sin(2*grid) + 
                  4*sin(3*grid))
 
@@ -34,10 +35,11 @@ let
          1.0 -1.0 2.0] 
     grid = linspace(0, 2π, 10)
     u = reconstruct(ks, x, grid)
-    @test vec(u[1, :]) ≈ 2*(5*sin(1*grid) -
+    # note the minus
+    @test vec(u[1, :]) ≈ -2*(5*sin(1*grid) -
                             2*sin(2*grid) +
                             4*sin(3*grid))
-    @test vec(u[2, :]) ≈ 2*(1*sin(1*grid) -
+    @test vec(u[2, :]) ≈ -2*(1*sin(1*grid) -
                             1*sin(2*grid) +
                             2*sin(3*grid))
 end
@@ -89,7 +91,8 @@ let
     x = [1, 2, 3] 
     grid = linspace(0, 2π, 11)
     u = reconstruct!(ks, x, grid, similar(grid))
-    @test u ≈ 2*(1*sin(grid) + 2*sin(2*grid) +  3*sin(3*grid))
+    # note the minus
+    @test u ≈ -2*(1*sin(grid) + 2*sin(2*grid) +  3*sin(3*grid))
     # use composite trapezoidal rule
     @test 𝒦(ks, x) ≈ 1/2*sum(u[2:end-1].^2)*grid[2]/2π
 end
@@ -105,8 +108,9 @@ let
     grid = linspace(0, 2π, 11)
     u = reconstruct!(ks, x, grid, similar(grid))
     v = reconstruct!(ks, y, grid, similar(grid))
-    @test u ≈ 2*(1*sin(grid) + 2*sin(2*grid) +  3*sin(3*grid))
-    @test v ≈ 2*(2*sin(grid) + 3*sin(2*grid) +  4*sin(3*grid))
+    # note the minus
+    @test u ≈ -2*(1*sin(grid) + 2*sin(2*grid) +  3*sin(3*grid))
+    @test v ≈ -2*(2*sin(grid) + 3*sin(2*grid) +  4*sin(3*grid))
     # use composite trapezoidal rule
     @test inner(ks, x, y) ≈ 1/2*sum( (u.*v)[2:end-1] )*grid[2]/2π
 end    
