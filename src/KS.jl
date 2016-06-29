@@ -20,10 +20,10 @@ end
 
 ndofs(ks::KSEq) = ks.N
 
-function 𝒩!{T<:Number}(ks::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T})
+function 𝒩!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector)
     N = ks.N
     for k = 1:N
-        s = zero(T)
+        s = zero(eltype(x))
         for m = max(-N, k-N):min(N, k+N)
             if !(k-m == 0 || m == 0)
                 @inbounds s += x[abs(m)]*x[abs(k-m)]*sign(m)*sign(k-m)
@@ -34,7 +34,7 @@ function 𝒩!{T<:Number}(ks::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T}
     ẋ
 end
 
-function ℒ!{T<:Number}(ks::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T})
+function ℒ!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector)
     ν, N = ks.ν, ks.N
     @simd for k = 1:N
         @inbounds ẋ[k] += k*k*(1-ν*k*k)*x[k]
@@ -44,7 +44,7 @@ end
 
 @inline Refk(k::Integer) = - sin(k*π/2)/2π
 
-function 𝒞!{T<:Number}(ks::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T}, v::AbstractVector)
+function 𝒞!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector, v::AbstractVector)
     u = x⋅v # control input
     @simd for k = 1:ks.N
         @inbounds ẋ[k] += Refk(k)*u
@@ -52,10 +52,10 @@ function 𝒞!{T<:Number}(ks::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T}
     ẋ
 end
 
-function call{T<:Number}(ks::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T}, v::AbstractVector)
+function call(ks::KSEq, ẋ::AbstractVector, x::AbstractVector, v::AbstractVector)
     @assert length(x) == length(ẋ) == length(x) == ks.N
     # use new julia function composition syntax
-    fill!(ẋ, zero(T))
+    fill!(ẋ, zero(eltype(ẋ)))
     ℒ!(ks, ẋ, x)
     𝒩!(ks, ẋ, x)
     𝒞!(ks, ẋ, x, v)
@@ -144,16 +144,16 @@ reconstruct(ks::KSEq, x::AbstractMatrix, xg::AbstractVector) =
 
 # ~~~ inner product, norm, energy and the like ~~~
 
-function inner{T, S}(ks::KSEq, x::AbstractVector{T}, y::AbstractVector{S})
+function inner(ks::KSEq, x::AbstractVector, y::AbstractVector)
     @assert length(x) == length(y) == ks.N
-    s = zero(promote_type(T, S))
+    s = zero(promote_type(eltype(x), eltype(y)))
     @simd for k in 1:ks.N
         @inbounds s += x[k]*y[k]
     end
     2*s
 end
 
-norm{T}(ks::KSEq, x::AbstractVector{T}) = sqrt(inner(ks, x, x))
+norm(ks::KSEq, x::AbstractVector) = sqrt(inner(ks, x, x))
 
 # kinetic energy density
 𝒦(ks::KSEq, x::AbstractVector) = inner(ks, x, x)
