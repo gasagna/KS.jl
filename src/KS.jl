@@ -18,10 +18,10 @@ immutable KSEq
     N::Int64
 end
 
-ndofs(ks!::KSEq) = ks!.N
+ndofs(ks::KSEq) = ks.N
 
-function 𝒩!{T<:Number}(ks!::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T})
-    N = ks!.N
+function 𝒩!{T<:Number}(ks::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T})
+    N = ks.N
     for k = 1:N
         s = zero(T)
         for m = max(-N, k-N):min(N, k+N)
@@ -34,8 +34,8 @@ function 𝒩!{T<:Number}(ks!::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T
     ẋ
 end
 
-function ℒ!{T<:Number}(ks!::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T})
-    ν, N = ks!.ν, ks!.N
+function ℒ!{T<:Number}(ks::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T})
+    ν, N = ks.ν, ks.N
     @simd for k = 1:N
         @inbounds ẋ[k] += k*k*(1-ν*k*k)*x[k]
     end
@@ -44,35 +44,35 @@ end
 
 @inline Refk(k::Integer) = - sin(k*π/2)/2π
 
-function 𝒞!{T<:Number}(ks!::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T}, v::AbstractVector)
+function 𝒞!{T<:Number}(ks::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T}, v::AbstractVector)
     u = x⋅v # control input
-    @simd for k = 1:ks!.N
+    @simd for k = 1:ks.N
         @inbounds ẋ[k] += Refk(k)*u
     end
     ẋ
 end
 
-function call{T<:Number}(ks!::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T}, v::AbstractVector)
-    @assert length(x) == length(ẋ) == length(x) == ks!.N
+function call{T<:Number}(ks::KSEq, ẋ::AbstractVector{T}, x::AbstractVector{T}, v::AbstractVector)
+    @assert length(x) == length(ẋ) == length(x) == ks.N
     # use new julia function composition syntax
     fill!(ẋ, zero(T))
-    ℒ!(ks!, ẋ, x)
-    𝒩!(ks!, ẋ, x)
-    𝒞!(ks!, ẋ, x, v)
+    ℒ!(ks, ẋ, x)
+    𝒩!(ks, ẋ, x)
+    𝒞!(ks, ẋ, x, v)
 end
 
 # ~~~ Jacobian of the system ~~~
 immutable KSStateJacobian
-    ks::KSEq
+    ks:KSEq
 end
-∂ₓ(ks!::KSEq) = KSStateJacobian(ks!)
+∂ₓ(ks::KSEq) = KSStateJacobian(ks)
 
 function call(ksJ::KSStateJacobian, 
               J::AbstractMatrix, 
               x::AbstractVector, 
               v::AbstractVector)
     J[:] = zero(eltype(J))
-    ν, N = ksJ.ks.ν, ksJ.ks.N
+    ν, N = ksJ.ksν, ksJ.ksN
     for k = 1:N # linear term
         @inbounds J[k, k] = k*k*(1 - ν*k*k)
     end
@@ -90,15 +90,15 @@ function call(ksJ::KSStateJacobian,
 end
 
 immutable KSParamJacobian
-    ks::KSEq
+    ks:KSEq
 end
-∂ᵥ(ks!::KSEq) = KSParamJacobian(ks!)
+∂ᵥ(ks::KSEq) = KSParamJacobian(ks)
 
 function call(ksJ::KSParamJacobian, 
               J::AbstractMatrix, 
               x::AbstractVector, 
               v::AbstractVector)
-    N = ksJ.ks.N
+    N = ksJ.ksN
     for k = 1:N 
         fk = Refk(k)
         for p = 1:N 
@@ -111,11 +111,11 @@ end
 
 # ~~~ Reconstruction functions ~~~
 
-function reconstruct!(ks!::KSEq,           # the system
+function reconstruct!(ks::KSEq,           # the system
                       x::AbstractVector,  # state vector
                       xg::AbstractVector, # the grid
                       u::AbstractVector)  # output
-    ν, N = ks!.ν, ks!.N
+    ν, N = ks.ν, ks.N
     u[:] = 0
     @inbounds for k = 1:length(x)
         xk = x[k]
@@ -126,37 +126,37 @@ function reconstruct!(ks!::KSEq,           # the system
     u
 end
 
-function reconstruct!(ks!::KSEq,           # the system
+function reconstruct!(ks::KSEq,           # the system
                       x::AbstractMatrix,  # state vector
                       xg::AbstractVector, # the grid
                       u::AbstractMatrix)  # output
     for ti = 1:size(u, 1)
-        reconstruct!(ks!, slice(x, ti, :), xg, slice(u, ti, :))
+        reconstruct!(ks, slice(x, ti, :), xg, slice(u, ti, :))
     end
     u
 end
 
-reconstruct(ks!::KSEq, x::AbstractVector, xg::AbstractVector) = 
-    reconstruct!(ks!, x, xg, Array(eltype(x), length(xg)))
+reconstruct(ks::KSEq, x::AbstractVector, xg::AbstractVector) = 
+    reconstruct!(ks, x, xg, Array(eltype(x), length(xg)))
 
-reconstruct(ks!::KSEq, x::AbstractMatrix, xg::AbstractVector) = 
-    reconstruct!(ks!, x, xg, Array(eltype(x), size(x, 1), length(xg)))
+reconstruct(ks::KSEq, x::AbstractMatrix, xg::AbstractVector) = 
+    reconstruct!(ks, x, xg, Array(eltype(x), size(x, 1), length(xg)))
 
 # ~~~ inner product, norm, energy and the like ~~~
 
-function inner{T, S}(ks!::KSEq, x::AbstractVector{T}, y::AbstractVector{S})
-    @assert length(x) == length(y) == ks!.N
+function inner{T, S}(ks::KSEq, x::AbstractVector{T}, y::AbstractVector{S})
+    @assert length(x) == length(y) == ks.N
     s = zero(promote_type(T, S))
-    @simd for k in 1:ks!.N
+    @simd for k in 1:ks.N
         @inbounds s += x[k]*y[k]
     end
     2*s
 end
 
-norm{T}(ks!::KSEq, x::AbstractVector{T}) = sqrt(inner(ks!, x, x))
+norm{T}(ks::KSEq, x::AbstractVector{T}) = sqrt(inner(ks, x, x))
 
 # kinetic energy density
-𝒦(ks!::KSEq, x::AbstractVector) = inner(ks!, x, x)
+𝒦(ks::KSEq, x::AbstractVector) = inner(ks, x, x)
 
 
 end
