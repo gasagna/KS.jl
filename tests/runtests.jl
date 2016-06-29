@@ -9,7 +9,7 @@ let
     ks = KSEq(ν, 3)
     x = rand(ndofs(ks))
     ẋ = similar(x)
-    ks(ẋ, x)
+    ks(ẋ, x, [0, 0, 0])
 end
 
 # test ndofs
@@ -42,15 +42,42 @@ let
                             2*sin(3*grid))
 end
 
-# test jacobian
+# test state jacobian
 let 
     srand(0)
-    for N = 1:16
+    for N = 1:100
         x = randn(N)
+        v = randn(N)
         ks = KSEq(ν, N)
-        ksx) = ks(similar(x), x)
-        J_ex = KS.jacobian(ks)(zeros(N, N), x)
-        J_ad = ForwardDiff.jacobian!(zeros(N, N), ks x)
+        
+        # define function
+        ksfun(x) = ks(similar(x), x, v)
+        
+        # analytic jacobian
+        J_ex = ∂ₓ(ks)(zeros(N, N), x, v)
+
+        # ad jacobian
+        J_ad = ForwardDiff.jacobian!(zeros(N, N), ksfun, x)
+        @test J_ad ≈ J_ex
+    end
+end
+
+# test parameter jacobian
+let 
+    srand(0)
+    for N = 3:3
+        x = randn(N)
+        v = randn(N)
+        ks = KSEq(ν, N)
+        
+        # define function
+        ksfun(v) = ks(zeros(eltype(v), length(x)), x, v)
+
+        # analytic jacobian
+        J_ex = ∂ᵥ(ks)(zeros(N, N), x, v)
+
+        # ad jacobian
+        J_ad = ForwardDiff.jacobian!(zeros(N, N), ksfun, v)
         @test J_ad ≈ J_ex
     end
 end
@@ -64,7 +91,7 @@ let
     u = reconstruct!(ks, x, grid, similar(grid))
     @test u ≈ 2*(1*sin(grid) + 2*sin(2*grid) +  3*sin(3*grid))
     # use composite trapezoidal rule
-    @test 𝒦(ks, x) ≈ sum(u[2:end-1].^2)*grid[2]/2π
+    @test 𝒦(ks, x) ≈ 1/2*sum(u[2:end-1].^2)*grid[2]/2π
 end
 
 # test inner product, norm
@@ -81,5 +108,5 @@ let
     @test u ≈ 2*(1*sin(grid) + 2*sin(2*grid) +  3*sin(3*grid))
     @test v ≈ 2*(2*sin(grid) + 3*sin(2*grid) +  4*sin(3*grid))
     # use composite trapezoidal rule
-    @test inner(ks, x, y) ≈ sum( (u.*v)[2:end-1] )*grid[2]/2π
+    @test inner(ks, x, y) ≈ 1/2*sum( (u.*v)[2:end-1] )*grid[2]/2π
 end    
