@@ -62,6 +62,12 @@ function call(ks::KSEq, ẋ::AbstractVector, x::AbstractVector, v::AbstractVecto
 end
 
 # ~~~ Jacobian of the system ~~~
+macro checkJacdimension
+    :(size(J) == (length(x), length(v)) || 
+        throw(ArgumentError("Wrong input dimension. Got J->$(size(J)), " * 
+            "x->$(length(x)), v->$(length(v))")))
+end
+
 immutable KSStateJacobian
     ks::KSEq
 end
@@ -71,6 +77,7 @@ function call(ksJ::KSStateJacobian,
               J::AbstractMatrix, 
               x::AbstractVector, 
               v::AbstractVector)
+    @checkJacdimension
     J[:] = zero(eltype(J))
     ν, N = ksJ.ksν, ksJ.ksN
     for k = 1:N # linear term
@@ -98,6 +105,7 @@ function call(ksJ::KSParamJacobian,
               J::AbstractMatrix, 
               x::AbstractVector, 
               v::AbstractVector)
+    @checkJacdimension
     N = ksJ.ksN
     for k = 1:N 
         fk = Refk(k)
