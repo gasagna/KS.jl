@@ -2,14 +2,24 @@ using Base.Test
 using ForwardDiff
 using KS
 
-const ν = 1/(38.5/2π)^2 # 1/L̃^2
+const ν = 1/(39/2π)^2 # 1/L̃^2
 
 # test basic call works
 let 
-    ks = KSEq(ν, 3)
-    x = rand(ndofs(ks))
+    ks = KSEq(ν, 10)
+    x = zeros(ndofs(ks))
     ẋ = similar(x)
-    ks(ẋ, x, [0, 0, 0])
+    # zero is an equilibrium
+    @test ks(ẋ, x) == zeros(ndofs(ks))
+end
+
+# provide gains
+let 
+    ks = KSEq(ν, 10, randn(10))
+    x = zeros(ndofs(ks))
+    ẋ = similar(x)
+    # zero is an equilibrium
+    @test ks(ẋ, x) == zeros(ndofs(ks))
 end
 
 # test ndofs
@@ -47,16 +57,17 @@ end
 # test state jacobian
 let 
     srand(0)
-    for N = 1:100
-        x = randn(N)
-        v = randn(N)
-        ks = KSEq(ν, N)
+    for N = 1:5
+        ks = KSEq(ν, N, randn(N))
         
+        # fix a random point
+        x = randn(N)
+
         # define function
-        ksfun(x) = ks(similar(x), x, v)
+        ksfun(x) = ks(similar(x), x)
         
         # analytic jacobian
-        J_ex = ∂ₓ(ks)(zeros(N, N), x, v)
+        J_ex = KS.∂ₓ(ks)(zeros(N, N), x)
 
         # ad jacobian
         J_ad = ForwardDiff.jacobian!(zeros(N, N), ksfun, x)
@@ -64,19 +75,20 @@ let
     end
 end
 
-# test parameter jacobian
+# test parameter jacobian using 
 let 
     srand(0)
     for N = 3:3
+        # fix a point
         x = randn(N)
         v = randn(N)
-        ks = KSEq(ν, N)
         
         # define function
-        ksfun(v) = ks(zeros(eltype(v), length(x)), x, v)
+        ksfun(v) = KSEq(ν, N, v)(similar(v), x)
 
         # analytic jacobian
-        J_ex = ∂ᵥ(ks)(zeros(N, N), x, v)
+        ks = KSEq(ν, N, v)
+        J_ex = ∂ᵥ(ks)(zeros(N, N), x)
 
         # ad jacobian
         J_ad = ForwardDiff.jacobian!(zeros(N, N), ksfun, v)

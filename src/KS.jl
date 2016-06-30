@@ -13,10 +13,19 @@ export KSEq,
        inner,
        ∂ₓ, ∂ᵥ
 
-immutable KSEq
-    ν::Float64
-    Nₓ::Int64
+# Kuramoto-Sivashinski system with single output linear state feedback
+immutable KSEq{T}
+    ν::Float64   # Hyper viscosity
+    Nₓ::Int64    # Number of Fourier modes
+    v::Vector{T} # feedback parameters
+    function KSEq(ν::Real, Nₓ::Integer, v::AbstractVector{T})
+        length(v) == Nₓ || 
+            throw(ArgumentError("wrong size of feedback parameters vector"))
+        new(ν, Nₓ, v)
+    end
 end
+KSEq{T}(ν::Real, Nₓ::Integer, v::AbstractVector{T}) = KSEq{T}(ν, Nₓ, v)
+KSEq(ν::Real, Nₓ::Integer) = KSEq(ν, Nₓ, zeros(Float64, Nₓ))
 
 ndofs(ks::KSEq) = ks.Nₓ
 
@@ -44,28 +53,30 @@ end
 
 @inline Refk(k::Integer) = -sin(k*π/2)/2π
 
-function 𝒞!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector, v::AbstractVector)
-    u = x⋅v # control input
+# Linear state feedback. Note feedback parameters are defined 
+# when the object is instantiated.
+function 𝒞!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector)
+    u = x⋅ks.v # control input
     @simd for k = 1:ks.Nₓ
         @inbounds ẋ[k] += Refk(k)*u
     end
     ẋ
 end
 
-function call(ks::KSEq, ẋ::AbstractVector, x::AbstractVector, v::AbstractVector)
-    @assert length(x) == length(ẋ) == length(x) == ks.Nₓ
-    # use new julia function composition syntax
+function call(ks::KSEq, ẋ::AbstractVector, x::AbstractVector)
+    @assert length(x) == length(ẋ) == ks.Nₓ
     fill!(ẋ, zero(eltype(ẋ)))
     ℒ!(ks, ẋ, x)
     𝒩!(ks, ẋ, x)
-    𝒞!(ks, ẋ, x, v)
+    𝒞!(ks, ẋ, x)
 end
 
 # ~~~ Jacobian of the system ~~~
-macro checkJacdimension()
-    :(size(J) == (length(x), length(v)) || 
-        throw(ArgumentError("Wrong input dimension. Got J->$(size(J)), " * 
-            "x->$(length(x)), v->$(length(v))")))
+function checkJacdimension(J, x, Nₓ)
+    size(J) == (length(x), length(x)) &&
+    length(x) == Nₓ || throw(ArgumentError("Wrong input dimension. " * 
+        "Got J->$(size(J)), x->$(length(x)), v->$(length(v))"))
+    nothing
 end
 
 immutable KSStateJacobian
@@ -75,16 +86,18 @@ end
 
 function call(ksJ::KSStateJacobian, 
               J::AbstractMatrix, 
-              x::AbstractVector, 
-              v::AbstractVector)
-    @checkJacdimension
+              x::AbstractVector)
+    # hoist variables out
+    ν, Nₓ, v = ksJ.ks.ν, ksJ.ks.Nₓ, ksJ.ks.v
+    # check
+    checkJacdimension(J, x, Nₓ)
+    # reset
     J[:] = zero(eltype(J))
-    ν, Nₓ = ksJ.ks.ν, ksJ.ks.Nₓ
     for k = 1:Nₓ # linear term
         @inbounds J[k, k] = k*k*(1 - ν*k*k)
     end
     for p = 1:Nₓ, k = 1:Nₓ # nonlinear term
-        k != p   && @inbounds J[k, p] += -2*k*x[abs(k-p)]*sign(k-p) 
+        k != p    && @inbounds J[k, p] += -2*k*x[abs(k-p)]*sign(k-p) 
         k+p <= Nₓ && @inbounds J[k, p] +=  2*k*x[k+p]
     end
     for k = 1:Nₓ # control term
@@ -103,13 +116,14 @@ end
 
 function call(ksJ::KSParamJacobian, 
               J::AbstractMatrix, 
-              x::AbstractVector, 
-              v::AbstractVector)
-    @checkJacdimension
-    Nₓ = ksJ.ks.Nₓ
+              x::AbstractVector)
+    # hoist variables
+    Nₓ, v = ksJ.ks.Nₓ, ksJ.ks.v
+    # checks
+    checkJacdimension(J, x, Nₓ)
     for k = 1:Nₓ 
         fk = Refk(k)
-        for p = 1:length(v) 
+        for p = 1:Nₓ
             @inbounds J[k, p] = fk*x[p]
         end
     end
