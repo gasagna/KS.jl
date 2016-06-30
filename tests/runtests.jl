@@ -106,16 +106,18 @@ let
     # note the minus
     @test u ≈ -2*(1*sin(grid) + 2*sin(2*grid) +  3*sin(3*grid))
     # use composite trapezoidal rule
-    @test 𝒦(ks, x) ≈ 1/2*sum(u[2:end-1].^2)*grid[2]/2π
+    𝒦 = KineticEnergyDensity(ks)
+    @test 𝒦(x) ≈ 1/2*sum(u[2:end-1].^2)*grid[2]/2π
 end
 
 # test inner product, norm
 let 
     ks = KSEq(ν, 3)
+    𝒦 = KineticEnergyDensity(ks)
     x = [1, 2, 3] 
     y = [2, 3, 4]
     @test inner(ks, x, y) == inner(ks, y, x) 
-    @test norm(ks, x)^2 ≈ 𝒦(ks, x)
+    @test norm(ks, x)^2 ≈ 𝒦(x)
 
     grid = linspace(0, 2π, 11)
     u = reconstruct!(ks, x, grid, similar(grid))
@@ -126,3 +128,14 @@ let
     # use composite trapezoidal rule
     @test inner(ks, x, y) ≈ 1/2*sum( (u.*v)[2:end-1] )*grid[2]/2π
 end    
+
+
+let
+    x = Float64[1, 2, 3]
+    ks = KSEq(1, length(x))
+    ϕ = KineticEnergyDensity(ks)
+
+    @test     ϕ(x) == 1^2 + 2^2 + 3^2
+    @test ∂ₓ(ϕ)(similar(x), x) == [2, 4, 6]
+    @test ∂ᵥ(ϕ)(similar(x), x) == [0, 0, 0]
+end

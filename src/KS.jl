@@ -9,7 +9,7 @@ export KSEq,
        ndofs,
        reconstruct!,
        reconstruct,
-       𝒦,
+       KineticEnergyDensity,
        inner,
        ∂ₓ, ∂ᵥ
 
@@ -173,8 +173,24 @@ end
 
 norm(ks::KSEq, x::AbstractVector) = sqrt(inner(ks, x, x))
 
-# kinetic energy density
-𝒦(ks::KSEq, x::AbstractVector) = inner(ks, x, x)
+# Kinetic energy density
+immutable KineticEnergyDensity
+    ks::KSEq
+end
+call(k::KineticEnergyDensity, x::AbstractVector) = inner(k.ks, x, x)
 
+# gradient of kinetic energy density wrt state variables
+immutable KEDStateGrad end
+∂ₓ(k::KineticEnergyDensity) = KEDStateGrad()
+
+call(k::KEDStateGrad, out::AbstractVector, x::AbstractVector) = 
+    scale!(copy!(out, x), 2.0)
+
+# gradient of kinetic energy density wrt feedback parameters is zero
+immutable KEDParamGrad end
+∂ᵥ(k::KineticEnergyDensity) = KEDParamGrad()
+
+call(k::KEDParamGrad, out::AbstractVector, x::AbstractVector) = 
+    fill!(out, zero(eltype(out)))
 
 end
