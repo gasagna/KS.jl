@@ -168,11 +168,7 @@ reconstruct(ks::KSEq, x::AbstractMatrix, xg::AbstractVector) =
 
 function inner(ks::KSEq, x::AbstractVector, y::AbstractVector)
     @assert length(x) == length(y) == ks.Nₓ
-    s = zero(promote_type(eltype(x), eltype(y)))
-    @simd for k in 1:ks.Nₓ
-        @inbounds s += x[k]*y[k]
-    end
-    s
+    x⋅y
 end
 
 norm(ks::KSEq, x::AbstractVector) = sqrt(inner(ks, x, x))
