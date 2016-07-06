@@ -51,7 +51,7 @@ function ℒ!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector)
     ẋ
 end
 
-@inline Refk(k::Integer) = -sin(k*π/2)/2π
+@inline Refk(k::Integer) = -sin(k*π/4)/2π
 
 # Linear state feedback. Note feedback parameters are defined 
 # when the object is instantiated.
