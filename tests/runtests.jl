@@ -1,6 +1,8 @@
 using Base.Test
 using ForwardDiff
 using KS
+using POF
+using POF.DB
 
 const ν = 1/(39/2π)^2 # 1/L̃^2
 
@@ -153,4 +155,42 @@ let
 
     x = [1e-7, 1, 1e-6, 1]
     @test issymmetric(x, 2e-7) == false
+end
+
+# test application of symmetries
+let
+    x = [1 1 1 1;
+         2 2 2 2;
+         3 3 3 3;
+         4 4 4 4] 
+    out = [-1 -1 -1 -1;
+            2  2  2  2;
+           -3 -3 -3 -3;
+            4  4  4  4] 
+    @test R⁺(PeriodicTrajectory(x)) == PeriodicTrajectory(out)
+end
+
+# make sure symmetric orbit is also a solution
+let
+    orb = PeriodicOrbitFile("tmphyHYMD.orb")
+    @test issymmetric(orb) == false
+
+    # number of Fourier modes
+    Nₓ = 32
+
+    # system
+    ν = 0.025955567129755053 #1/(39/2π)^2
+    f = KS.KSEq(ν, Nₓ, zeros(Nₓ))
+    fₓ = KS.∂ₓ(f)
+
+    # options
+    opts = POFOptions(verbose=false, maxiter=3)
+
+    # check this is an orbit
+    @test isconverged(pof!(f, fₓ, 
+            data(trajectory(orb)),     2π/period(orb); options=opts)) == true
+
+    # symmetrize orbit
+    @test isconverged(pof!(f, fₓ, 
+            data(R⁺(trajectory(orb))), 2π/period(orb); options=opts)) == true
 end

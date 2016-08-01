@@ -12,9 +12,11 @@ export KSEq,
        KineticEnergyDensity,
        inner,
        ∂ₓ, ∂ᵥ,
-       issymmetric
+       issymmetric, R⁺, R⁺!
 
-import POF.PeriodicOrbitFile       
+
+using POF
+using POF.DB
 
 # Kuramoto-Sivashinski system with single output linear state feedback
 immutable KSEq{T}
@@ -196,7 +198,7 @@ immutable KEDParamGrad end
 call(k::KEDParamGrad, out::AbstractVector, x::AbstractVector) = 
     fill!(out, zero(eltype(out)))
 
-# Properties of orbits
+# ~~~ Properties of orbits ~~~
 
 # An orbit for the KS system is symmetric if the odd 
 # modes have zero mean. `S` is a vector containing
@@ -210,5 +212,20 @@ end
 
 issymmetric(orbit::PeriodicOrbitFile, tol::Real=1e-6) =
     issymmetric(stats(orbit), tol)
+
+# ~~~ Apply symmetries to orbits ~~~
+function R⁺!(y::AbstractTrajectory, x::AbstractTrajectory)
+    @inbounds for j = 1:length(x) # for each time
+        for i = 1:2:ndimensions(x) # invert odd states
+            y[i, j] = -x[i, j]
+        end
+        for i = 2:2:ndimensions(x) # copy even states
+            y[i, j] = x[i, j]
+        end
+    end
+    y
+end 
+
+R⁺(x) = R⁺!(similar(x), x)
 
 end
