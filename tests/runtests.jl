@@ -139,3 +139,18 @@ let
     @test ∂ₓ(ϕ)(similar(x), x) == [2, 4, 6]
     @test ∂ᵥ(ϕ)(similar(x), x) == [0, 0, 0]
 end
+
+# test symmetry
+let
+    x = [1, 1, 1, 1]
+    @test issymmetric(x) == false
+
+    x = [1e-7, 1, 1e-7, 1]
+    @test issymmetric(x) == true
+
+    x = [1e-7, 1, 1e-7, 1]
+    @test issymmetric(x, 1e-8) == false
+
+    x = [1e-7, 1, 1e-6, 1]
+    @test issymmetric(x, 2e-7) == false
+end
