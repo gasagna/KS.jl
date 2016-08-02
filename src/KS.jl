@@ -23,14 +23,19 @@ immutable KSEq{T}
     ν::Float64   # Hyper viscosity
     Nₓ::Int64    # Number of Fourier modes
     v::Vector{T} # feedback parameters
-    function KSEq(ν::Real, Nₓ::Integer, v::AbstractVector{T})
+    xₐ::Float64
+    function KSEq(ν::Real, Nₓ::Integer, v::AbstractVector{T}, xₐ::Real)
         length(v) == Nₓ || 
             throw(ArgumentError("wrong size of feedback parameters vector"))
-        new(ν, Nₓ, v)
+        0 <= xₐ <= π ||     
+            throw(ArgumentError("actuator position must ∈ [0, π]"))
+        new(ν, Nₓ, v, xₐ)
     end
 end
-KSEq{T}(ν::Real, Nₓ::Integer, v::AbstractVector{T}) = KSEq{T}(ν, Nₓ, v)
-KSEq(ν::Real, Nₓ::Integer) = KSEq(ν, Nₓ, zeros(Float64, Nₓ))
+KSEq{T}(ν::Real, Nₓ::Integer, v::AbstractVector{T}, xₐ::Real=π/2) = 
+    KSEq{T}(ν, Nₓ, v, xₐ)
+
+KSEq(ν::Real, Nₓ::Integer, xₐ::Real=π/2) = KSEq(ν, Nₓ, zeros(Float64, Nₓ), xₐ)
 
 ndofs(ks::KSEq) = ks.Nₓ
 
@@ -56,14 +61,15 @@ function ℒ!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector)
     ẋ
 end
 
-@inline Refk(k::Integer) = -sin(k*π/4)/2π
+@inline Refk(k::Integer, xₐ::Real) = -sin(k*xₐ)/2π
 
 # Linear state feedback. Note feedback parameters are defined 
 # when the object is instantiated.
 function 𝒞!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector)
-    u = x⋅ks.v # control input
+    u  = x⋅ks.v # control input
+    xₐ = ks.xₐ 
     @simd for k = 1:ks.Nₓ
-        @inbounds ẋ[k] += Refk(k)*u
+        @inbounds ẋ[k] += Refk(k, xₐ)*u
     end
     ẋ
 end
@@ -93,7 +99,7 @@ function call(ksJ::KSStateJacobian,
               J::AbstractMatrix, 
               x::AbstractVector)
     # hoist variables out
-    ν, Nₓ, v = ksJ.ks.ν, ksJ.ks.Nₓ, ksJ.ks.v
+    ν, Nₓ, v, xₐ = ksJ.ks.ν, ksJ.ks.Nₓ, ksJ.ks.v, ksJ.ks.xₐ
     # check
     checkJacdimension(J, x, Nₓ)
     # reset
@@ -106,7 +112,7 @@ function call(ksJ::KSStateJacobian,
         k+p <= Nₓ && @inbounds J[k, p] +=  2*k*x[k+p]
     end
     for k = 1:Nₓ # control term
-        fk = Refk(k)
+        fk = Refk(k, xₐ)
         for p = 1:length(v)
             @inbounds J[k, p] += fk*v[p]
         end
@@ -123,11 +129,11 @@ function call(ksJ::KSParamJacobian,
               J::AbstractMatrix, 
               x::AbstractVector)
     # hoist variables
-    Nₓ, v = ksJ.ks.Nₓ, ksJ.ks.v
+    Nₓ, v, xₐ = ksJ.ks.Nₓ, ksJ.ks.v, ksJ.ks.xₐ
     # checks
     checkJacdimension(J, x, Nₓ)
     for k = 1:Nₓ 
-        fk = Refk(k)
+        fk = Refk(k, xₐ)
         for p = 1:Nₓ
             @inbounds J[k, p] = fk*x[p]
         end
