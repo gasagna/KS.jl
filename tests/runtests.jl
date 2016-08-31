@@ -283,7 +283,7 @@ let
     ϕᵥ = KS.∂ᵥ(ϕ)
 
     # options
-    opts = POFOptions(verbose=false, maxiter=3)
+    opts = POFOptions(verbose=false, maxiter=10)
 
     # check this is an orbit
     @test isconverged(pof!(f, fₓ, 
@@ -301,6 +301,7 @@ let
 
     # find perturbed orbit
     rp = pof!(fp, fpₓ, data(trajectory(orb)), 2π/period(orb); options=opts)
+    @test isconverged(rp)
 
     # compute difference in cost
     ϕ̄p = POF.average(ϕ, PeriodicTrajectory(rp.X))
