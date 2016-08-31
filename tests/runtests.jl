@@ -294,7 +294,7 @@ let
 
     # perturb system in the gradient direction
     λ = 1e-7
-    V = -λ*reshape(ϕ̄ᵥ, Nₓ, Nₓ)' # note the transpose here
+    V = -λ*reshape(ϕ̄ᵥ, Nₓ, Nₓ) # note the transpose here
     fp = KS.KSEqDistributedControl(ν, Nₓ, V)
     fpₓ = KS.∂ₓ(fp)
     fpᵥ = KS.∂ᵥ(fp)

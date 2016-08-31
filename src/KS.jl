@@ -221,10 +221,9 @@ function call(ksJ::KSParamJacobianDistributed, J::AbstractMatrix, x::AbstractVec
     # fill with zeros
     fill!(J, zero(eltype(J)))
     for k = 1:Nₓ
-        start = (k-1)*Nₓ + 1  
-        stop  = start + Nₓ - 1
-        for (pi, p) in enumerate(start:stop)
-            @inbounds J[k, p] = -0.5*x[pi]
+        Δ = (k-1)*Nₓ
+        for p = 1:Nₓ
+            @inbounds J[p, p+Δ] = -0.5*x[k]
         end
     end
     J
