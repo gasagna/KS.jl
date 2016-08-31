@@ -7,20 +7,21 @@ using POF.DB
 # used below
 const ν = 1/(39/2π)^2 # 1/L̃^2
 
-# compute jacobian of function f(out, x) using finite differences
+# Compute jacobian of function f(out, x) using finite differences.
 function fdjac(f, Nout, x::AbstractVector, h::Float64=1e-7)
-    N = length(x)
-    # preallocate output
+    # Note that f : R^Nin → R^Nout
+    Nin = length(x)
+    # preallocate output and temporary arrays
     out_p = zeros(Nout)
     out_m = zeros(Nout)
-    J = zeros(N, N)
-    for j = 1:N
+    J = zeros(Nout, Nin)
+    for j = 1:Nin # for each parameter
         x[j] += h
         f(out_p, x)
         x[j] -= 2h
         f(out_m, x)
         x[j] += h
-        for i = 1:Nout
+        for i = 1:Nout # for each output
             J[i, j] = (out_p[i] - out_m[i])/(2h)
         end
     end
@@ -149,7 +150,7 @@ end
 # test parameter jacobian for distributed actuation
 let 
     srand(0)
-    for N = 2
+    for N = 1:32
         # fix a point
         x = randn(N)
         V = randn(N, N)
@@ -164,8 +165,8 @@ let
         J_ex = ∂ᵥ(ks)(zeros(N, N*N), x)
 
         # fd jacobian, evaluated at v
-        J_fd = fdjac(fun, N, V[:], 1e-6)
-        # @test maxabs(J_fd - J_ex) < 2e-6
+        J_fd = fdjac(fun, N, V[:], 2e-6)
+        @test maxabs(J_fd - J_ex) < 2e-6
     end
 end
 
@@ -308,8 +309,8 @@ let
     ϕ̄  = POF.average(ϕ, trajectory(orb))
 
     # show, for the sake of checking
-    @printf "%.10f\n" (ϕ̄p - ϕ̄)/λ
-    @printf "%.10f\n" -norm(ϕ̄ᵥ)^2
+    # @printf "%.10f\n" (ϕ̄p - ϕ̄)/λ
+    # @printf "%.10f\n" -norm(ϕ̄ᵥ)^2
 
     # test
     @test abs( ((ϕ̄p - ϕ̄)/λ) - (-norm(ϕ̄ᵥ)^2) ) < 1e-6
