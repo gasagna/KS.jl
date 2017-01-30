@@ -10,6 +10,8 @@ export KSEq, KSEqPointControl, KSEqDistributedControl,
        reconstruct!,
        reconstruct,
        KineticEnergyDensity,
+       ProductionDensity,
+       DissipationDensity,
        inner,
        ∂ₓ, ∂ᵥ,
        issymmetric, R⁺, R⁺!
@@ -288,6 +290,32 @@ function inner(ks::AbstractKSEq, x::AbstractVector, y::AbstractVector)
 end
 
 norm(ks::AbstractKSEq, x::AbstractVector) = sqrt(inner(ks, x, x))
+
+# Energy density production
+# P = 1/2π ∫ (uₓ)^2 dx
+# 
+immutable ProductionDensity end
+function call(p::ProductionDensity, x::AbstractVector) 
+    P = x[1]^2
+    @simd for k = 2:length(x)
+        @inbounds P += (x[k]*k)^2
+    end
+    2P
+end
+
+# Energy density dissipation 
+# D = ν/2π ∫ (uₓₓ)^2 dx
+# 
+immutable DissipationDensity
+    ks::AbstractKSEq
+end
+function call(p::DissipationDensity, x::AbstractVector) 
+    D = x[1]^2
+    @simd for k = 2:length(x)
+        @inbounds D += x[k]^2*k^4
+    end
+    2*p.ks.ν*D
+end
 
 # Kinetic energy density
 immutable KineticEnergyDensity

@@ -203,6 +203,17 @@ let
     @test inner(ks, x, y) ≈ 1/2*sum( (u.*v)[2:end-1] )*grid[2]/2π
 end    
 
+# test dissipation and production work
+let
+    ks = KSEq((2π/39)^2, 32)
+    𝒫 = ProductionDensity()
+    𝒟 = DissipationDensity(ks)
+
+    # on a periodic orbit the average production is the same
+    # as the average dissipation
+    orb = PeriodicOrbitFile("tmphyHYMD.orb")
+    @test ptrapz(map(𝒫, trajectory(orb))) == ptrapz(map(𝒟, trajectory(orb)))
+end
 
 let
     x = Float64[1, 2, 3]
