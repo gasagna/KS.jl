@@ -14,7 +14,7 @@ export KSEq, KSEqPointControl, KSEqDistributedControl,
        DissipationDensity,
        inner,
        ∂ₓ, ∂ᵥ,
-       issymmetric, R⁺, R⁺!
+       isUPOsymmetric, R⁺, R⁺!
 
 using POF
 using POF.DB
@@ -25,20 +25,14 @@ abstract AbstractKSEq
 # common functions
 ndofs(ks::AbstractKSEq) = ks.Nₓ
 
-# actual call
-function call(ks::AbstractKSEq, ẋ::AbstractVector, x::AbstractVector)
-    @assert length(x) == length(ẋ) == ks.Nₓ
-    fill!(ẋ, zero(eltype(ẋ)))
-    ℒ!(ks, ẋ, x)
-    𝒩!(ks, ẋ, x)
-    𝒞!(ks, ẋ, x) # concrete types need to implement custom 𝒞!
-end
+# call is defined later on for all concrete types
+# see https://github.com/JuliaLang/julia/issues/14919 why
 
 # linear term
 function ℒ!(ks::AbstractKSEq, ẋ::AbstractVector, x::AbstractVector)
     ν, Nₓ = ks.ν, ks.Nₓ
-    @simd for k = 1:Nₓ
-        @inbounds ẋ[k] += k*k*(1-ν*k*k)*x[k]
+    for k = 1:Nₓ
+        ẋ[k] += k*k*(1-ν*k*k)*x[k]
     end
     ẋ
 end
@@ -50,10 +44,10 @@ function 𝒩!(ks::AbstractKSEq, ẋ::AbstractVector, x::AbstractVector)
         s = zero(eltype(x))
         for m = max(-Nₓ, k-Nₓ):min(Nₓ, k+Nₓ)
             if !(k-m == 0 || m == 0)
-                @inbounds s += x[abs(m)]*x[abs(k-m)]*sign(m)*sign(k-m)
+                s += x[abs(m)]*x[abs(k-m)]*sign(m)*sign(k-m)
             end
         end
-        @inbounds ẋ[k] -= k*s
+        ẋ[k] -= k*s
     end
     ẋ
 end
@@ -73,7 +67,7 @@ function checkdims(ksJ::KSStateJacobian, J::AbstractMatrix, x::AbstractVector)
 end
 
 # actual call
-function call(ksJ::KSStateJacobian, J::AbstractMatrix, x::AbstractVector)
+function (ksJ::KSStateJacobian)(J::AbstractMatrix, x::AbstractVector)
     checkdims(ksJ, J, x)
     fill!(J, zero(eltype(J)))
     ℒ!(ksJ, J, x)
@@ -146,7 +140,7 @@ immutable KSParamJacobianPoint
 end
 ∂ᵥ(ks::KSEqPointControl) = KSParamJacobianPoint(ks)
 
-function call(ksJ::KSParamJacobianPoint, J::AbstractMatrix,  x::AbstractVector)
+function (ksJ::KSParamJacobianPoint)(J::AbstractMatrix,  x::AbstractVector)
     # hoist variables
     Nₓ, v, xₐ = ksJ.ks.Nₓ, ksJ.ks.v, ksJ.ks.xₐ
     # checks
@@ -215,7 +209,7 @@ immutable KSParamJacobianDistributed
 end
 ∂ᵥ(ks::KSEqDistributedControl) = KSParamJacobianDistributed(ks)
 
-function call(ksJ::KSParamJacobianDistributed, J::AbstractMatrix, x::AbstractVector)
+function (ksJ::KSParamJacobianDistributed)(J::AbstractMatrix, x::AbstractVector)
     # hoist variables
     Nₓ = ksJ.ks.Nₓ
     # checks
@@ -248,14 +242,25 @@ function 𝒞!(ksJ::KSStateJacobian{KSEqDistributedControl}, J::AbstractMatrix, 
     J
 end
 
+# add the call method to concrete types, see
+for T in [KSEq, KSEqPointControl, KSEqDistributedControl]
+    @eval function (ks::$T)(ẋ::AbstractVector, x::AbstractVector)
+        @assert length(x) == length(ẋ) == ks.Nₓ
+        fill!(ẋ, zero(eltype(ẋ)))
+        ℒ!(ks, ẋ, x)
+        𝒩!(ks, ẋ, x)
+        𝒞!(ks, ẋ, x) # concrete types need to implement custom 𝒞!
+    end
+end
+
 
 # ~~~ Reconstruction functions ~~~
-function reconstruct!(ks::AbstractKSEq,   # the system
-                      x::AbstractVector,  # state vector
-                      xg::AbstractVector, # the grid
-                      u::AbstractVector)  # output
+function reconstruct!{T<:Real}(ks::AbstractKSEq,     # the system
+                               x::AbstractVector{T}, # state vector
+                               xg::AbstractVector,   # the grid
+                               u::AbstractVector)    # output
     ν, Nₓ = ks.ν, ks.Nₓ
-    u[:] = 0
+    u[:] = zero(eltype(u))
     length(u) == length(xg) || error("xg and u must have same length")
     @inbounds for k = 1:length(x)
         xk = x[k]
@@ -271,7 +276,7 @@ function reconstruct!(ks::AbstractKSEq,   # the system
                       xg::AbstractVector, # the grid
                       u::AbstractMatrix)  # output
     for ti = 1:size(u, 1)
-        reconstruct!(ks, slice(x, ti, :), xg, slice(u, ti, :))
+        reconstruct!(ks, view(x, ti, :), xg, view(u, ti, :))
     end
     u
 end
@@ -295,7 +300,7 @@ norm(ks::AbstractKSEq, x::AbstractVector) = sqrt(inner(ks, x, x))
 # P = 1/2π ∫ (uₓ)^2 dx
 # 
 immutable ProductionDensity end
-function call(p::ProductionDensity, x::AbstractVector) 
+function (p::ProductionDensity)(x::AbstractVector) 
     P = x[1]^2
     @simd for k = 2:length(x)
         @inbounds P += (x[k]*k)^2
@@ -309,7 +314,7 @@ end
 immutable DissipationDensity
     ks::AbstractKSEq
 end
-function call(p::DissipationDensity, x::AbstractVector) 
+function (p::DissipationDensity)(x::AbstractVector) 
     D = x[1]^2
     @simd for k = 2:length(x)
         @inbounds D += x[k]^2*k^4
@@ -321,20 +326,20 @@ end
 immutable KineticEnergyDensity
     ks::AbstractKSEq
 end
-call(k::KineticEnergyDensity, x::AbstractVector) = inner(k.ks, x, x)
+(k::KineticEnergyDensity)(x::AbstractVector) = inner(k.ks, x, x)
 
 # gradient of kinetic energy density wrt state variables
 immutable KEDStateGrad end
 ∂ₓ(k::KineticEnergyDensity) = KEDStateGrad()
 
-call(k::KEDStateGrad, out::AbstractVector, x::AbstractVector) = 
+(k::KEDStateGrad)(out::AbstractVector, x::AbstractVector) = 
     scale!(copy!(out, x), 2.0)
 
 # gradient of kinetic energy density wrt feedback parameters is zero
 immutable KEDParamGrad end
 ∂ᵥ(k::KineticEnergyDensity) = KEDParamGrad()
 
-call(k::KEDParamGrad, out::AbstractVector, x::AbstractVector) = 
+(k::KEDParamGrad)(out::AbstractVector, x::AbstractVector) = 
     fill!(out, zero(eltype(out)))
 
 # ~~~ Properties of orbits ~~~
@@ -349,7 +354,7 @@ function issymmetric(S::Vector, tol::Real=1e-6)
     return true
 end 
 
-issymmetric(orbit::PeriodicOrbitFile, tol::Real=1e-6) =
+isUPOsymmetric(orbit::PeriodicOrbitFile, tol::Real=1e-6) =
     issymmetric(stats(orbit), tol)
 
 # ~~~ Apply symmetries to orbits ~~~

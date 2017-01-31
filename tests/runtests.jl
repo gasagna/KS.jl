@@ -212,7 +212,7 @@ let
     # on a periodic orbit the average production is the same
     # as the average dissipation
     orb = PeriodicOrbitFile("tmphyHYMD.orb")
-    @test ptrapz(map(𝒫, trajectory(orb))) == ptrapz(map(𝒟, trajectory(orb)))
+    @test ptrapz(map(𝒫, trajectory(orb))) ≈ ptrapz(map(𝒟, trajectory(orb)))
 end
 
 let
@@ -228,16 +228,16 @@ end
 # test symmetry
 let
     x = [1, 1, 1, 1]
-    @test issymmetric(x) == false
+    @test isUPOsymmetric(x) == false
 
     x = [1e-7, 1, 1e-7, 1]
-    @test issymmetric(x) == true
+    @test isUPOsymmetric(x) == true
 
     x = [1e-7, 1, 1e-7, 1]
-    @test issymmetric(x, 1e-8) == false
+    @test isUPOsymmetric(x, 1e-8) == false
 
     x = [1e-7, 1, 1e-6, 1]
-    @test issymmetric(x, 2e-7) == false
+    @test isUPOsymmetric(x, 2e-7) == false
 end
 
 # test application of symmetries
@@ -256,7 +256,7 @@ end
 # make sure symmetric orbit is also a solution
 let
     orb = PeriodicOrbitFile("tmphyHYMD.orb")
-    @test issymmetric(orb) == false
+    @test isUPOsymmetric(orb) == false
 
     # number of Fourier modes
     Nₓ = 32
