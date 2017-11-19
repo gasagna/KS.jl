@@ -64,7 +64,7 @@ end
 imex(KSEq) = KSEq.lks, KSEq.nlks
 
 # evaluate right hand side of equation
-(ks::KSEq)(t::Real, uk::Vector{Float64}, dukdt::Vector{Float64}) =
+(ks::KSEq)(t::Real, uk::Vector, dukdt::Vector) =
     (A_mul_B!(dukdt, ks.lks, uk); # linear term
      ks.nlks(t, uk, dukdt, true)) # nonlinear term (add value)
 
