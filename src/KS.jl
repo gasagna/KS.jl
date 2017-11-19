@@ -39,13 +39,16 @@ struct NonLinearKSEqTerm
 end
 
 function (nlks::NonLinearKSEqTerm)(t::Real, uk::Vector, dukdt::Vector, add::Bool=false)
+    # setup
     vk, u = nlks.vk, nlks.u                         # aliases
     N, L, U = length(uk)-1, nlks.L, nlks.U          # parameters
+    qk = 2π/L*(0:N)                                 # wave numbers
+
     uk[1] = 0                                       # make sure mean is zero
-    FFTW.unsafe_execute!(nlks.iplan, vk .= uk, u)        # copy and inverse transform
+    FFTW.unsafe_execute!(nlks.iplan, vk .= uk, u)   # copy and inverse transform
     u .= 0.5.*(U.+u).^2                             # sum U, square and divide by 2
-    FFTW.unsafe_execute!(nlks.fplan, u, vk)              # forward transform
-    vk .*= (2π/L/N).*im.*(0:N)                      # differentiate 1/2(u+U)^2 and normalise
+    FFTW.unsafe_execute!(nlks.fplan, u, vk)         # forward transform
+    vk .*= im.*qk./N                                # differentiate and normalise
     add == true ? (dukdt .-= vk) : (dukdt .= .- vk) # note minus sign on rhs
     dukdt[1] = 0                                    # make sure mean does not change
     return dukdt                                    # return
@@ -67,5 +70,37 @@ imex(KSEq) = KSEq.lks, KSEq.nlks
 (ks::KSEq)(t::Real, uk::Vector, dukdt::Vector) =
     (A_mul_B!(dukdt, ks.lks, uk); # linear term
      ks.nlks(t, uk, dukdt, true)) # nonlinear term (add value)
+
+
+# ~~~ LINEARISED EQUATION ~~~
+struct LinearisedKSEq
+     U::Float64                   # mean flow velocity
+     L::Float64                   # domain size
+     p::Vector{Float64}           # solution in physical space
+    pk::Vector{Complex{Float64}}  # temporary in Fourier space
+    wk::Vector{Complex{Float64}}  # temporary in Fourier space
+    iplan
+    fplan
+end
+
+
+function (lks::LinearisedKSEq)(t::Real, u::Vector, w::Vector, dwdt::Vector)
+    # setup
+    wk, pk, p = lks.wk, lks.pk, lks.p     # aliases
+    N, L, U = length(wk)-1, lks.L, lks.U  # parameters
+    qk = 2π/L*(0:N)                       # wave numbers
+
+    # compute term  -(u + U)*w
+    p .= .- (u .+ U).*w                   # compute product in physical space
+    FFTW.unsafe_execute(lks.fplan, p, pk) # transform to Fourier space
+    pk .*= im.*qk./N                      # differentiate and normalise
+   
+    # compute term  -u₂ₓ - u₄ₓ
+    FFTW.unsafe_execute(lks.fplan, w, wk) # transform to Fourier space
+    wk .*= (qk.^2 .- qk.^4)./N            # differentiate wk and normalise
+
+    # add, transform to physical space and return
+    FFTW.unsafe_execute(lks.iplan, pk .+= wk, dwdt); return dwdt
+end
 
 end
