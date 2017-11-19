@@ -13,10 +13,10 @@ struct LinearKSEqTerm
 end
 
 # obey IMEXRKCB interface
-Base.A_mul_B!(dukdt::Vector, lks::LinearKSEqTerm, uk::Vector) = 
+Base.A_mul_B!(dukdt::Vector, lks::LinearKSEqTerm, uk::Vector) =
     (dukdt .= lks.A .* uk; dukdt)
 
-IMEXRKCB.ImcA!(lks::LinearKSEqTerm, c::Real, uk::Vector, dukdt::Vector) = 
+IMEXRKCB.ImcA!(lks::LinearKSEqTerm, c::Real, uk::Vector, dukdt::Vector) =
     dukdt .= uk./(1 .- c.*lks.A)
 
 
@@ -56,7 +56,7 @@ end
 struct KSEq
      lks::LinearKSEqTerm
     nlks::NonLinearKSEqTerm
-    KSEq(N::Int, U::Real, L::Real) = 
+    KSEq(N::Int, U::Real, L::Real) =
         new(LinearKSEqTerm(N, L), NonLinearKSEqTerm(N, U, L))
 end
 
@@ -64,7 +64,7 @@ end
 imex(KSEq) = KSEq.lks, KSEq.nlks
 
 # evaluate right hand side of equation
-(ks::KSEq)(t::Real, uk::Vector{Float64}, dukdt::Vector{Float64}) = 
+(ks::KSEq)(t::Real, uk::Vector{Float64}, dukdt::Vector{Float64}) =
     (A_mul_B!(dukdt, ks.lks, uk); # linear term
      ks.nlks(t, uk, dukdt, true)) # nonlinear term (add value)
 
