@@ -22,12 +22,12 @@ IMEXRKCB.ImcA!(lks::LinearKSEqTerm, c::Real, uk::Vector, dukdt::Vector) =
 
 # ~~~ NONLINEAR TERM ~~~
 struct NonLinearKSEqTerm
-        U::Float64                   # mean flow velocity
-        L::Float64                   # domain size
-        u::Vector{Float64}           # solution in physical space
-       vk::Vector{Complex{Float64}}  # temporary in Fourier space
-    iplan
-    fplan
+     U::Float64                   # mean flow velocity
+     L::Float64                   # domain size
+     u::Vector{Float64}           # solution in physical space
+    vk::Vector{Complex{Float64}}  # temporary in Fourier space
+    iplan                         # plans
+    fplan                         #
     # N is the maximum wavenumber
     function NonLinearKSEqTerm(N::Int, U::Real, L::Real)
         u  = zeros(Float64,          2N+1)
@@ -44,14 +44,16 @@ function (nlks::NonLinearKSEqTerm)(t::Real, uk::Vector, dukdt::Vector, add::Bool
     N, L, U = length(uk)-1, nlks.L, nlks.U          # parameters
     qk = 2π/L*(0:N)                                 # wave numbers
 
+    # compute nonlinear term using FFTs
     uk[1] = 0                                       # make sure mean is zero
     FFTW.unsafe_execute!(nlks.iplan, vk .= uk, u)   # copy and inverse transform
     u .= 0.5.*(U.+u).^2                             # sum U, square and divide by 2
     FFTW.unsafe_execute!(nlks.fplan, u, vk)         # forward transform
     vk .*= im.*qk./N                                # differentiate and normalise
+
+    # add terms and return
     add == true ? (dukdt .-= vk) : (dukdt .= .- vk) # note minus sign on rhs
-    dukdt[1] = 0                                    # make sure mean does not change
-    return dukdt                                    # return
+    dukdt[1] = 0; return dukdt                      # make sure mean does not change
 end
 
 
@@ -76,14 +78,14 @@ imex(KSEq) = KSEq.lks, KSEq.nlks
 struct LinearisedKSEq
      U::Float64                   # mean flow velocity
      L::Float64                   # domain size
-     p::Vector{Float64}           # solution in physical space
+     p::Vector{Float64}           # temporary in physical space
     pk::Vector{Complex{Float64}}  # temporary in Fourier space
     wk::Vector{Complex{Float64}}  # temporary in Fourier space
-    iplan
-    fplan
+    iplan                         # plans
+    fplan                         #
 end
 
-
+# ~~~ EVALUATE LINEAR OPERATOR AROUND U ~~~
 function (lks::LinearisedKSEq)(t::Real, u::Vector, w::Vector, dwdt::Vector)
     # setup
     wk, pk, p = lks.wk, lks.pk, lks.p     # aliases
