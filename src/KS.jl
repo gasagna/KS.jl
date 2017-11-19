@@ -1,6 +1,6 @@
 module KS
 
-import FFTW: unsafe_execute!
+import FFTW
 import IMEXRKCB
 
 export KSEq, imex
@@ -42,9 +42,9 @@ function (nlks::NonLinearKSEqTerm)(t::Real, uk::Vector, dukdt::Vector, add::Bool
     vk, u = nlks.vk, nlks.u                         # aliases
     N, L, U = length(uk)-1, nlks.L, nlks.U          # parameters
     uk[1] = 0                                       # make sure mean is zero
-    unsafe_execute!(nlks.iplan, vk .= uk, u)        # copy and inverse transform
+    FFTW.unsafe_execute!(nlks.iplan, vk .= uk, u)        # copy and inverse transform
     u .= 0.5.*(U.+u).^2                             # sum U, square and divide by 2
-    unsafe_execute!(nlks.fplan, u, vk)              # forward transform
+    FFTW.unsafe_execute!(nlks.fplan, u, vk)              # forward transform
     vk .*= (2π/L/N).*im.*(0:N)                      # differentiate 1/2(u+U)^2 and normalise
     add == true ? (dukdt .-= vk) : (dukdt .= .- vk) # note minus sign on rhs
     dukdt[1] = 0                                    # make sure mean does not change
