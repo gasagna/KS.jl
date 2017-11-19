@@ -5,7 +5,7 @@ import IMEXRKCB
 
 export KSEq, imex
 
-# linear term
+# ~~~ LINEAR TERM ~~~
 struct LinearKSEqTerm
     A::Vector{Float64}
     L::Float64
@@ -19,7 +19,8 @@ Base.A_mul_B!(dukdt::Vector, lks::LinearKSEqTerm, uk::Vector) =
 IMEXRKCB.ImcA!(lks::LinearKSEqTerm, c::Real, uk::Vector, dukdt::Vector) = 
     dukdt .= uk./(1 .- c.*lks.A)
 
-# nonlinear term
+
+# ~~~ NONLINEAR TERM ~~~
 struct NonLinearKSEqTerm
         U::Float64                   # mean flow velocity
         L::Float64                   # domain size
@@ -50,7 +51,8 @@ function (nlks::NonLinearKSEqTerm)(t::Real, uk::Vector, dukdt::Vector, add::Bool
     return dukdt                                    # return
 end
 
-# Complete Equation
+
+# ~~~ COMPLETE EQUATION ~~~
 struct KSEq
      lks::LinearKSEqTerm
     nlks::NonLinearKSEqTerm
@@ -61,10 +63,9 @@ end
 # split linear and nonlinear term
 imex(KSEq) = KSEq.lks, KSEq.nlks
 
-# acceleration
-function (ks::KSEq)(t::Real, uk::Vector{Float64}, dukdt::Vector{Float64})
-    A_mul_B!(dukdt, ks.lks, uk)  # linear term
-    ks.nlks(t, uk, dukdt, true)  # nonlinear term (add value)
-end
+# evaluate right hand side of equation
+(ks::KSEq)(t::Real, uk::Vector{Float64}, dukdt::Vector{Float64}) = 
+    (A_mul_B!(dukdt, ks.lks, uk); # linear term
+     ks.nlks(t, uk, dukdt, true)) # nonlinear term (add value)
 
 end
