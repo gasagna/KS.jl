@@ -3,7 +3,7 @@ module KS
 import FFTW
 import IMEXRKCB
 
-export KSEq, imex
+export KSEq, imex, LinearisedKSEq
 
 # ~~~ LINEAR TERM ~~~
 struct LinearKSEqTerm
@@ -70,39 +70,48 @@ imex(KSEq) = KSEq.lks, KSEq.nlks
 
 # evaluate right hand side of equation
 (ks::KSEq)(t::Real, uk::Vector, dukdt::Vector) =
-    (A_mul_B!(dukdt, ks.lks, uk); # linear term
-     ks.nlks(t, uk, dukdt, true)) # nonlinear term (add value)
+    (A_mul_B!(dukdt, ks.lks, uk);        # linear term
+     ks.nlks(t, uk, dukdt, true); dukdt) # nonlinear term (add value)
 
 
 # ~~~ LINEARISED EQUATION ~~~
 struct LinearisedKSEq
-     U::Float64                   # mean flow velocity
-     L::Float64                   # domain size
-     p::Vector{Float64}           # temporary in physical space
-    pk::Vector{Complex{Float64}}  # temporary in Fourier space
-    wk::Vector{Complex{Float64}}  # temporary in Fourier space
-    iplan                         # plans
-    fplan                         #
+     U::Float64                  # mean flow velocity
+     L::Float64                  # domain size
+    nk::Vector{Complex{Float64}} # temporary in Fourier space
+     u::Vector{Float64}          # temporary in physical space
+     w::Vector{Float64}          # temporary in physical space
+    iplan                        # plans
+    fplan                        #
+    function LinearisedKSEq(N::Int, U::Real, L::Real)
+        u  = zeros(Float64,          2N+1)
+        w  = zeros(Float64,          2N+1)
+        nk = zeros(Complex{Float64},  N+1)
+        fplan = plan_rfft(  u,       flags=FFTW.PATIENT)
+        iplan = plan_brfft(nk, 2N+1, flags=FFTW.PATIENT)
+        new(U, L, nk, u, w, iplan, fplan)
+    end
 end
 
 # ~~~ EVALUATE LINEAR OPERATOR AROUND U ~~~
-function (lks::LinearisedKSEq)(t::Real, u::Vector, w::Vector, dwdt::Vector)
+function (lks::LinearisedKSEq)(t::Real, uk::Vector, wk::Vector, dwkdt::Vector)
     # setup
-    wk, pk, p = lks.wk, lks.pk, lks.p     # aliases
-    N, L, U = length(wk)-1, lks.L, lks.U  # parameters
-    qk = 2π/L*(0:N)                       # wave numbers
+    w, u, nk = lks.w, lks.u, lks.nk      # aliases
+    N, L, U = length(wk)-1, lks.L, lks.U # parameters
+    qk = 2π/L*(0:N)                      # wave numbers
+    uk[1] = 0; wk[1] = 0                 # make sure zero mean
 
-    # compute term  -(u + U)*w
-    p .= .- (u .+ U).*w                   # compute product in physical space
-    FFTW.unsafe_execute(lks.fplan, p, pk) # transform to Fourier space
-    pk .*= im.*qk./N                      # differentiate and normalise
+    # ffts
+    FFTW.unsafe_execute!(lks.iplan, uk, u)    # transform u to physical space
+    FFTW.unsafe_execute!(lks.iplan, wk, w)    # transform w to physical space
+
+    # compute term  -(u + U)*w, in place over u
+    u .= .- (u .+ U).*w                       # compute product in physical space
+    FFTW.unsafe_execute!(lks.fplan, u, dwkdt) # transform to Fourier space
+    dwkdt .*= im.*qk./N                       # differentiate and normalise
    
-    # compute term  -u₂ₓ - u₄ₓ
-    FFTW.unsafe_execute(lks.fplan, w, wk) # transform to Fourier space
-    wk .*= (qk.^2 .- qk.^4)./N            # differentiate wk and normalise
-
-    # add, transform to physical space and return
-    FFTW.unsafe_execute(lks.iplan, pk .+= wk, dwdt); return dwdt
+    # compute term  -w₂ₓ - w₄ₓ and return
+    dwkdt .+= wk.*(qk.^2 .- qk.^4); return dwkdt # differentiate wk, add other term
 end
 
 end
