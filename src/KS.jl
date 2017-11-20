@@ -1,375 +1,122 @@
-# ------------------------------------------------------------------- #
-# Copyright 2015-2016, Davide Lasagna, AFM, University of Southampton #
-# ------------------------------------------------------------------- #
+# -------------------------------------------------------------- #
+# Copyright 2017, Davide Lasagna, AFM, University of Southampton #
+# -------------------------------------------------------------- #
+
 module KS
 
-import Base: call, norm
+import FFTW
+import IMEXRKCB
 
-export KSEq, KSEqPointControl, KSEqDistributedControl,
-       ndofs,
-       reconstruct!,
-       reconstruct,
-       KineticEnergyDensity,
-       ProductionDensity,
-       DissipationDensity,
-       inner,
-       ∂ₓ, ∂ᵥ,
-       isUPOsymmetric, R⁺, R⁺!
+export KSEq, imex, LinearisedKSEq
 
-using POF
-using POF.DB
-
-# ~~~ Abstract Kuramoto-Sivashinsky system ~~~ 
-abstract AbstractKSEq
-
-# common functions
-ndofs(ks::AbstractKSEq) = ks.Nₓ
-
-# call is defined later on for all concrete types
-# see https://github.com/JuliaLang/julia/issues/14919 why
-
-# linear term
-function ℒ!(ks::AbstractKSEq, ẋ::AbstractVector, x::AbstractVector)
-    ν, Nₓ = ks.ν, ks.Nₓ
-    for k = 1:Nₓ
-        ẋ[k] += k*k*(1-ν*k*k)*x[k]
-    end
-    ẋ
+# ~~~ LINEAR TERM ~~~
+struct LinearKSEqTerm
+    A::Vector{Float64}
+    L::Float64
+    LinearKSEqTerm(N::Int, L::Real) = 
+        new(Float64[(2π*k/L)^2 - (2π*k/L)^4 for k = 0:N], L)
 end
 
-# nonlinear term
-function 𝒩!(ks::AbstractKSEq, ẋ::AbstractVector, x::AbstractVector)
-    Nₓ = ks.Nₓ
-    for k = 1:Nₓ
-        s = zero(eltype(x))
-        for m = max(-Nₓ, k-Nₓ):min(Nₓ, k+Nₓ)
-            if !(k-m == 0 || m == 0)
-                s += x[abs(m)]*x[abs(k-m)]*sign(m)*sign(k-m)
-            end
-        end
-        ẋ[k] -= k*s
-    end
-    ẋ
-end
+# obey IMEXRKCB interface
+Base.A_mul_B!(dukdt::Vector, lks::LinearKSEqTerm, uk::Vector) =
+    (dukdt .= lks.A .* uk; dukdt)
 
-# ~~~ System state jacobian ~~~
-immutable KSStateJacobian{T}
-    ks::T # parametrises type of control
-end
-∂ₓ(ks::AbstractKSEq) = KSStateJacobian(ks)
-
-function checkdims(ksJ::KSStateJacobian, J::AbstractMatrix, x::AbstractVector)
-    Nₓ = ksJ.ks.Nₓ
-    size(J) == (Nₓ, Nₓ) &&
-    length(x) == Nₓ || throw(ArgumentError("Wrong input dimension. " * 
-        "Got J->$(size(J)), x->$(length(x))"))
-    nothing
-end
-
-# actual call
-function (ksJ::KSStateJacobian)(J::AbstractMatrix, x::AbstractVector)
-    checkdims(ksJ, J, x)
-    fill!(J, zero(eltype(J)))
-    ℒ!(ksJ, J, x)
-    𝒩!(ksJ, J, x)
-    𝒞!(ksJ, J, x) # must implement control type
-end
-
-# linear term
-function ℒ!(ksJ::KSStateJacobian, J::AbstractMatrix, x::AbstractVector)
-    Nₓ, ν = ksJ.ks.Nₓ, ksJ.ks.ν
-    for k = 1:Nₓ
-        @inbounds J[k, k] += k*k*(1 - ν*k*k)
-    end
-    J
-end
-
-# nonlinear term
-function 𝒩!(ksJ::KSStateJacobian, J::AbstractMatrix, x::AbstractVector)
-    Nₓ, ν = ksJ.ks.Nₓ, ksJ.ks.ν
-    for p = 1:Nₓ, k = 1:Nₓ
-        k != p    && @inbounds J[k, p] += -2*k*x[abs(k-p)]*sign(k-p) 
-        k+p <= Nₓ && @inbounds J[k, p] +=  2*k*x[k+p]
-    end
-    J
-end
+IMEXRKCB.ImcA!(lks::LinearKSEqTerm, c::Real, uk::Vector, dukdt::Vector) =
+    dukdt .= uk./(1 .- c.*lks.A)
 
 
-# ~~~ Concrete KS system without control ~~~
-immutable KSEq <: AbstractKSEq
-    ν::Float64         # Hyper viscosity
-    Nₓ::Int64          # Number of Fourier modes
-end
-
-# no control 
-𝒞!(ks::KSEq, ẋ::AbstractVector, x::AbstractVector) = ẋ
-𝒞!(ks::KSStateJacobian, J::AbstractMatrix, x::AbstractVector) = J
-
-
-# ~~~ Concrete Kuramoto-Sivashinsky system with point actuation ~~~
-immutable KSEqPointControl <: AbstractKSEq
-    ν::Float64         # Hyper viscosity
-    Nₓ::Int64          # Number of Fourier modes
-    v::Vector{Float64} # feedback parameters
-    xₐ::Float64        # actuator position
-    function KSEqPointControl(ν::Real, Nₓ::Integer, v::AbstractVector, xₐ::Real)
-        length(v) == Nₓ || 
-            throw(ArgumentError("wrong size of feedback parameters vector"))
-        0 <= xₐ <= π ||     
-            throw(ArgumentError("actuator position must ∈ [0, π]"))
-        new(ν, Nₓ, v, xₐ)
+# ~~~ NONLINEAR TERM ~~~
+struct NonLinearKSEqTerm
+     U::Float64                   # mean flow velocity
+     L::Float64                   # domain size
+     u::Vector{Float64}           # solution in physical space
+    vk::Vector{Complex{Float64}}  # temporary in Fourier space
+    iplan                         # plans
+    fplan                         #
+    # N is the maximum wavenumber
+    function NonLinearKSEqTerm(N::Int, U::Real, L::Real)
+        u  = zeros(Float64,          2N+1)
+        vk = zeros(Complex{Float64},  N+1)
+        fplan = plan_rfft(  u,       flags=FFTW.PATIENT)
+        iplan = plan_brfft(vk, 2N+1, flags=FFTW.PATIENT)
+        new(U, L, u, vk, iplan, fplan)
     end
 end
 
-# control description
-@inline Refk(k::Integer, xₐ::Real) = -sin(k*xₐ)/2π
+function (nlks::NonLinearKSEqTerm)(t::Real, uk::Vector, dukdt::Vector, add::Bool=false)
+    # setup
+    vk, u = nlks.vk, nlks.u                         # aliases
+    N, L, U = length(uk)-1, nlks.L, nlks.U          # parameters
+    qk = 2π/L*(0:N)                                 # wave numbers
 
-# Linear state feedback driving point actuator
-function 𝒞!(ks::KSEqPointControl, ẋ::AbstractVector, x::AbstractVector)
-    u  = x⋅ks.v # control input
-    xₐ = ks.xₐ 
-    @simd for k = 1:ks.Nₓ
-        @inbounds ẋ[k] += Refk(k, xₐ)*u
-    end
-    ẋ
-end    
+    # compute nonlinear term using FFTs
+    uk[1] = 0                                       # make sure mean is zero
+    FFTW.unsafe_execute!(nlks.iplan, vk .= uk, u)   # copy and inverse transform
+    u .= 0.5.*(U.+u).^2                             # sum U, square and divide by 2
+    FFTW.unsafe_execute!(nlks.fplan, u, vk)         # forward transform
+    vk .*= im.*qk./N                                # differentiate and normalise
 
-# jacobian of system wrt parameters with point actuation
-immutable KSParamJacobianPoint
-    ks::KSEqPointControl
-end
-∂ᵥ(ks::KSEqPointControl) = KSParamJacobianPoint(ks)
-
-function (ksJ::KSParamJacobianPoint)(J::AbstractMatrix,  x::AbstractVector)
-    # hoist variables
-    Nₓ, v, xₐ = ksJ.ks.Nₓ, ksJ.ks.v, ksJ.ks.xₐ
-    # checks
-    checkdims(ksJ, J, x)
-    for k = 1:Nₓ 
-        fk = Refk(k, xₐ)
-        for p = 1:Nₓ
-            @inbounds J[k, p] = fk*x[p]
-        end
-    end
-    J
-end
-
-function checkdims(ksJ::KSParamJacobianPoint, J::AbstractMatrix, x::AbstractVector)
-    Nₓ = ksJ.ks.Nₓ
-    size(J) == (Nₓ, Nₓ) &&
-    length(x) == Nₓ || throw(ArgumentError("Wrong input dimension. " * 
-        "Got J->$(size(J)), x->$(length(x))"))
-    nothing
-end
-
-# jacobian of system wrt state with point actuation, control term only
-function 𝒞!(ksJ::KSStateJacobian{KSEqPointControl}, J::AbstractMatrix, x::AbstractVector)
-    Nₓ, v, xₐ = ksJ.ks.Nₓ, ksJ.ks.v, ksJ.ks.xₐ
-    for k = 1:Nₓ 
-        fk = Refk(k, xₐ)
-        for p = 1:Nₓ
-            @inbounds J[k, p] += fk*v[p]
-        end
-    end
-    J
+    # add terms and return
+    add == true ? (dukdt .-= vk) : (dukdt .= .- vk) # note minus sign on rhs
+    dukdt[1] = 0; return dukdt                      # make sure mean does not change
 end
 
 
-# ~~~ Kuramoto-Sivashinsky system with distributed actuation ~~~
-immutable KSEqDistributedControl <: AbstractKSEq
-    ν::Float64         # Hyper viscosity
-    Nₓ::Int64          # Number of Fourier modes
-    V::Matrix{Float64} # feedback parameters
-    g::Vector{Float64} # temporary storage for vector of control inputs
-    function KSEqDistributedControl(ν::Real, Nₓ::Integer, V::AbstractMatrix)
-        size(V) == (Nₓ, Nₓ) || 
-            throw(ArgumentError("wrong size of feedback parameters matrix"))
-        new(ν, Nₓ, V, zeros(Float64, Nₓ))
+# ~~~ COMPLETE EQUATION ~~~
+struct KSEq
+     lks::LinearKSEqTerm
+    nlks::NonLinearKSEqTerm
+    KSEq(N::Int, U::Real, L::Real) =
+        new(LinearKSEqTerm(N, L), NonLinearKSEqTerm(N, U, L))
+end
+
+# split linear and nonlinear term
+imex(KSEq) = KSEq.lks, KSEq.nlks
+
+# evaluate right hand side of equation
+(ks::KSEq)(t::Real, uk::Vector, dukdt::Vector) =
+    (A_mul_B!(dukdt, ks.lks, uk);        # linear term
+     ks.nlks(t, uk, dukdt, true); dukdt) # nonlinear term (add value)
+
+
+# ~~~ LINEARISED EQUATION ~~~
+struct LinearisedKSEq
+     U::Float64                  # mean flow velocity
+     L::Float64                  # domain size
+    nk::Vector{Complex{Float64}} # temporary in Fourier space
+     u::Vector{Float64}          # temporary in physical space
+     w::Vector{Float64}          # temporary in physical space
+    iplan                        # plans
+    fplan                        #
+    function LinearisedKSEq(N::Int, U::Real, L::Real)
+        u  = zeros(Float64,          2N+1)
+        w  = zeros(Float64,          2N+1)
+        nk = zeros(Complex{Float64},  N+1)
+        fplan = plan_rfft(  u,       flags=FFTW.PATIENT)
+        iplan = plan_brfft(nk, 2N+1, flags=FFTW.PATIENT)
+        new(U, L, nk, u, w, iplan, fplan)
     end
 end
 
-KSEqDistributedControl(ν::Real, Nₓ::Integer) = 
-    KSEqDistributedControl(ν, Nₓ, zeros(Float64, Nₓ, Nₓ))
+# ~~~ EVALUATE LINEAR OPERATOR AROUND U ~~~
+function (lks::LinearisedKSEq)(t::Real, uk::Vector, wk::Vector, dwkdt::Vector)
+    # setup
+    w, u, nk = lks.w, lks.u, lks.nk      # aliases
+    N, L, U = length(wk)-1, lks.L, lks.U # parameters
+    qk = 2π/L*(0:N)                      # wave numbers
+    uk[1] = 0; wk[1] = 0                 # make sure zero mean
 
-# Linear state feedback driving distributed control
-function 𝒞!(ks::KSEqDistributedControl, ẋ::AbstractVector, x::AbstractVector)
-    # A_mul_B!(ks.g, ks.V, x) # pre-compute control input vector
-    # g = ks.g
-    g = ks.V * x
-    # loop
-    @simd for k = 1:ks.Nₓ
-        @inbounds ẋ[k] -= 0.5*g[k]
-    end
-    ẋ
-end  
+    # ffts
+    FFTW.unsafe_execute!(lks.iplan, uk, u)    # transform u to physical space
+    FFTW.unsafe_execute!(lks.iplan, wk, w)    # transform w to physical space
 
-# jacobian of system wrt parameters with distributed actuation
-immutable KSParamJacobianDistributed
-    ks::KSEqDistributedControl
+    # compute term  -(u + U)*w, in place over u
+    u .= .- (u .+ U).*w                       # compute product in physical space
+    FFTW.unsafe_execute!(lks.fplan, u, dwkdt) # transform to Fourier space
+    dwkdt .*= im.*qk./N                       # differentiate and normalise
+   
+    # compute term  -w₂ₓ - w₄ₓ and return
+    dwkdt .+= wk.*(qk.^2 .- qk.^4); return dwkdt # differentiate wk, add other term
 end
-∂ᵥ(ks::KSEqDistributedControl) = KSParamJacobianDistributed(ks)
-
-function (ksJ::KSParamJacobianDistributed)(J::AbstractMatrix, x::AbstractVector)
-    # hoist variables
-    Nₓ = ksJ.ks.Nₓ
-    # checks
-    checkdims(ksJ, J, x)
-    # fill with zeros
-    fill!(J, zero(eltype(J)))
-    for k = 1:Nₓ
-        Δ = (k-1)*Nₓ
-        for p = 1:Nₓ
-            @inbounds J[p, p+Δ] = -0.5*x[k]
-        end
-    end
-    J
-end
-
-function checkdims(ksJ::KSParamJacobianDistributed, J::AbstractMatrix, x::AbstractVector)
-    Nₓ = ksJ.ks.Nₓ
-    size(J) == (Nₓ, Nₓ^2) &&
-    length(x) == Nₓ || throw(ArgumentError("Wrong input dimension. " * 
-        "Got J->$(size(J)), x->$(length(x))"))
-    nothing
-end
-
-# jacobian of system wrt state with distributed actuation, control term only
-function 𝒞!(ksJ::KSStateJacobian{KSEqDistributedControl}, J::AbstractMatrix, x::AbstractVector)
-    Nₓ, V = ksJ.ks.Nₓ, ksJ.ks.V
-    for k = 1:Nₓ, p = 1:Nₓ
-        @inbounds J[k, p] -= 0.5*V[k, p]
-    end
-    J
-end
-
-# add the call method to concrete types, see
-for T in [KSEq, KSEqPointControl, KSEqDistributedControl]
-    @eval function (ks::$T)(ẋ::AbstractVector, x::AbstractVector)
-        @assert length(x) == length(ẋ) == ks.Nₓ
-        fill!(ẋ, zero(eltype(ẋ)))
-        ℒ!(ks, ẋ, x)
-        𝒩!(ks, ẋ, x)
-        𝒞!(ks, ẋ, x) # concrete types need to implement custom 𝒞!
-    end
-end
-
-
-# ~~~ Reconstruction functions ~~~
-function reconstruct!{T<:Real}(ks::AbstractKSEq,     # the system
-                               x::AbstractVector{T}, # state vector
-                               xg::AbstractVector,   # the grid
-                               u::AbstractVector)    # output
-    ν, Nₓ = ks.ν, ks.Nₓ
-    u[:] = zero(eltype(u))
-    length(u) == length(xg) || error("xg and u must have same length")
-    @inbounds for k = 1:length(x)
-        xk = x[k]
-        @simd for i = 1:length(xg)
-            u[i] -= 2*xk*sin(k*xg[i])
-        end
-    end
-    u
-end
-
-function reconstruct!(ks::AbstractKSEq,   # the system
-                      x::AbstractMatrix,  # state vector
-                      xg::AbstractVector, # the grid
-                      u::AbstractMatrix)  # output
-    for ti = 1:size(u, 1)
-        reconstruct!(ks, view(x, ti, :), xg, view(u, ti, :))
-    end
-    u
-end
-
-reconstruct(ks::AbstractKSEq, x::AbstractVector, xg::AbstractVector) = 
-    reconstruct!(ks, x, xg, Array(eltype(x), length(xg)))
-
-reconstruct(ks::AbstractKSEq, x::AbstractMatrix, xg::AbstractVector) = 
-    reconstruct!(ks, x, xg, Array(eltype(x), size(x, 1), length(xg)))
-
-# ~~~ inner product, norm, energy and the like ~~~
-
-function inner(ks::AbstractKSEq, x::AbstractVector, y::AbstractVector)
-    @assert length(x) == length(y) == ks.Nₓ
-    x⋅y
-end
-
-norm(ks::AbstractKSEq, x::AbstractVector) = sqrt(inner(ks, x, x))
-
-# Energy density production
-# P = 1/2π ∫ (uₓ)^2 dx
-# 
-immutable ProductionDensity end
-function (p::ProductionDensity)(x::AbstractVector) 
-    P = x[1]^2
-    @simd for k = 2:length(x)
-        @inbounds P += (x[k]*k)^2
-    end
-    2P
-end
-
-# Energy density dissipation 
-# D = ν/2π ∫ (uₓₓ)^2 dx
-# 
-immutable DissipationDensity
-    ks::AbstractKSEq
-end
-function (p::DissipationDensity)(x::AbstractVector) 
-    D = x[1]^2
-    @simd for k = 2:length(x)
-        @inbounds D += x[k]^2*k^4
-    end
-    2*p.ks.ν*D
-end
-
-# Kinetic energy density
-immutable KineticEnergyDensity
-    ks::AbstractKSEq
-end
-(k::KineticEnergyDensity)(x::AbstractVector) = inner(k.ks, x, x)
-
-# gradient of kinetic energy density wrt state variables
-immutable KEDStateGrad end
-∂ₓ(k::KineticEnergyDensity) = KEDStateGrad()
-
-(k::KEDStateGrad)(out::AbstractVector, x::AbstractVector) = 
-    scale!(copy!(out, x), 2.0)
-
-# gradient of kinetic energy density wrt feedback parameters is zero
-immutable KEDParamGrad end
-∂ᵥ(k::KineticEnergyDensity) = KEDParamGrad()
-
-(k::KEDParamGrad)(out::AbstractVector, x::AbstractVector) = 
-    fill!(out, zero(eltype(out)))
-
-# ~~~ Properties of orbits ~~~
-
-# An orbit for the KS system is symmetric if the odd 
-# modes have zero mean. `S` is a vector containing
-# the baricenter position.
-function issymmetric(S::Vector, tol::Real=1e-6)
-    for k = 1:2:length(S)
-        abs(S[k]) > tol && return false
-    end
-    return true
-end 
-
-isUPOsymmetric(orbit::PeriodicOrbitFile, tol::Real=1e-6) =
-    issymmetric(stats(orbit), tol)
-
-# ~~~ Apply symmetries to orbits ~~~
-function R⁺!(y::AbstractTrajectory, x::AbstractTrajectory)
-    @inbounds for j = 1:length(x) # for each time
-        for i = 1:2:ndimensions(x) # invert odd states
-            y[i, j] = -x[i, j]
-        end
-        for i = 2:2:ndimensions(x) # copy even states
-            y[i, j] = x[i, j]
-        end
-    end
-    y
-end 
-
-R⁺(x) = R⁺!(similar(x), x)
 
 end
