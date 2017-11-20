@@ -9,7 +9,8 @@ export KSEq, imex, LinearisedKSEq
 struct LinearKSEqTerm
     A::Vector{Float64}
     L::Float64
-    LinearKSEqTerm(N::Int, L::Real) = new(Float64[(k/L)^2 - (k/L)^4 for k = 0:N], L)
+    LinearKSEqTerm(N::Int, L::Real) = 
+        new(Float64[(2π*k/L)^2 - (2π*k/L)^4 for k = 0:N], L)
 end
 
 # obey IMEXRKCB interface
