@@ -7,14 +7,15 @@ export FTField, Field
 # ~~~ SOLUTION IN FOURIER SPACE ~~~
 # n is the largest wave number
 struct FTField{n, T<:Complex, M<:AbstractVector{T}}
-    data::M
-    FTField{n}(data::M) where {n, T, M<:AbstractVector{T}} = 
-        new{n, T, M}(data)
+    data::M       # Fourier series coefficients
+       L::Float64 # domain size
+    FTField{n}(data::M, L::Real) where {n, T, M<:AbstractVector{T}} = 
+        new{n, T, M}(data, L)
 end
 
 # ~ outer constructors 
-FTField(n::Int, ::Type{T}=Complex128) where {T} = FTField(zeros(T, n+1))
-FTField(data::AbstractVector) = FTField{length(data)-1}(data)
+FTField(n::Int, L::Real, ::Type{T}=Complex128) where {T} = FTField(zeros(T, n+1), L)
+FTField(data::AbstractVector, L::Real) = FTField{length(data)-1}(data, L)
 
 # ~ indexing is zero based
 Base.indices(::FTField{n}) where {n} = 0:n-1
@@ -30,7 +31,7 @@ Base.IndexStyle(::Type{<:FTField}) = Base.IndexLinear()
      @inbounds uk.data[i+1] = val; val)
 
 Base.similar(::FTField{n, T}) where {n, T} = FTField(n, T)
-Base.copy(uk::FTField) = FTField(copy(uk.data))
+Base.copy(uk::FTField) = FTField(copy(uk.data), uk.L)
 
 # ~ broadcast
 @generated function Base.Broadcast.broadcast!(f, uk::FTField, args::Vararg{Any, n}) where {n}
@@ -55,17 +56,18 @@ Base.norm(a::FTField) = sqrt(dot(a, a))
 
 # ~~~ SOLUTION IN PHYSICAL SPACE ~~~
 struct Field{n, T<:Real, M<:AbstractVector{T}} <: AbstractVector{T}
-    data::M
-    function Field{n}(data::M) where {n, T, M<:AbstractVector{T}}
+    data::M       # solution in physical space, last point omitted
+       L::Float64 # domain size
+    function Field{n}(data::M, L::Real) where {n, T, M<:AbstractVector{T}}
         iseven(length(data)) || error("input data must be even")
         2n  == length(data)  || error("inconsistent input data")
-        new{n, T, M}(data)
+        new{n, T, M}(data, L)
     end
 end
 
 # ~ outer constructors
-Field(n::Int, ::Type{T}=Float64) where {T} = Field(zeros(T, 2*n))
-Field(data::AbstractVector) = Field{length(data)>>1}(data)
+Field(n::Int, L::Real, ::Type{T}=Float64) where {T} = Field(zeros(T, 2*n), L)
+Field(data::AbstractVector, L::Real) = Field{length(data)>>1}(data, L)
 
 # ~ indexing is zero based
 Base.indices(::Field{n}) where {n} = 0:2n-1
