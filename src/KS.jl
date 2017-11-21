@@ -10,18 +10,21 @@ import IMEXRKCB
 export KSEq, imex, LinearisedKSEq
 
 # ~~~ LINEAR TERM ~~~
-struct LinearKSEqTerm
+struct LinearKSEqTerm{n}
     A::Vector{Float64}
     L::Float64
-    LinearKSEqTerm(N::Int, L::Real) = 
-        new(Float64[(2π*k/L)^2 - (2π*k/L)^4 for k = 0:N], L)
+    LinearKSEqTerm{n}(L::Real) =
+        new{n}(Float64[(2π*k/L)^2 - (2π*k/L)^4 for k = 0:n], L)
 end
 
+# outer constructor
+LinearKSEqTerm(n::Int, L::Real) = LinearisedKSEq{n}(L)
+
 # obey IMEXRKCB interface
-Base.A_mul_B!(dukdt::Vector, lks::LinearKSEqTerm, uk::Vector) =
+Base.A_mul_B!(dukdt::FTField{n}, lks::LinearKSEqTerm{n}, uk::FTField{n}) where {n} =
     (dukdt .= lks.A .* uk; dukdt)
 
-IMEXRKCB.ImcA!(lks::LinearKSEqTerm, c::Real, uk::Vector, dukdt::Vector) =
+IMEXRKCB.ImcA!(lks::LinearKSEqTerm{n}, c::Real, uk::FTField{n}, dukdt::FTField{n}) where {n} =
     dukdt .= uk./(1 .- c.*lks.A)
 
 
