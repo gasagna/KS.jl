@@ -1,10 +1,10 @@
 using Base.Test
 using KS
 
-@testset "spaces                          " begin
-    @testset "FTField                          " begin
+@testset "spaces                                 " begin
+    @testset "FTField                                " begin
         # indexing
-        uk = FTField(2)
+        uk = FTField(2, 1)
         @test length(uk.data) == 3
               uk[0] =  0.0+0.0*im
         @test uk[0] == 0.0+0.0*im
@@ -21,15 +21,15 @@ using KS
         @test vk[2] == 0.0+0.0*im
         # dot and norm
         # cos(x)*cos(x)
-        uk = FTField(2); uk[1] = 0.5
+        uk = FTField(2, 1); uk[1] = 0.5
         @test dot(uk, uk) == 0.5
         @test norm(uk) == sqrt(0.5)
         # cos(x)*sin(x)
-        uk = FTField(2); uk[1] =  0.5
-        vk = FTField(2); vk[1] = -0.5*im
+        uk = FTField(2, 1); uk[1] =  0.5
+        vk = FTField(2, 1); vk[1] = -0.5*im
         @test dot(uk, vk) == 0.0
         #broadcast
-        uk  = FTField(3)
+        uk  = FTField(3, 1)
         uk .= 1 + 2*im
         @test uk[1] == 1 + 2*im
         # broadcast with wave numbers
@@ -39,16 +39,16 @@ using KS
         @test uk[2] == 2*im
         @test uk[3] == 3*im
     end
-    @testset "Field                          " begin
+    @testset "Field                                  " begin
         # indexing
-        u = Field(2)
+        u = Field(2, 1)
               u[0] =  1
         @test u[0] == 1
               u[1] =  2
         @test u[1] == 2
 
         # broadcast
-        u   = Field(2)
+        u   = Field(2, 1)
         u .+= 1
         @test u[0] == u[1] == 1
     end
@@ -58,11 +58,11 @@ end
     # setup
     n, U, L = 5, 0, 5
     F = KSEq(n, U, L)
-    L = LinearisedKSEq(n, U, L)
+    ℒ = LinearisedKSEq(n, U, L)
     
     # allocate
     srand(0)
-    uk    = ForwardFFT(n)(Field(randn(2n)), FTField(n)); uk[0] = 0 
+    uk    = ForwardFFT(n)(Field(randn(2n), L), FTField(n, L)); uk[0] = 0 
     wk    = similar(uk)
     dwkdt = similar(uk)
 
@@ -71,7 +71,7 @@ end
 
         # get value from linearisation
         wk[k] += 1
-        L(0.0, uk, wk, dwkdt)
+        ℒ(0.0, uk, wk, dwkdt)
         wk[k] -= 1
 
         # approximate using finite differences

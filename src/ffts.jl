@@ -15,7 +15,7 @@ struct ForwardFFT{n, P}
 end
 
 ForwardFFT(u::Field{n}) where {n} = ForwardFFT{n}(u)
-ForwardFFT(n::Int) = ForwardFFT(Field(n))
+ForwardFFT(n::Int) = ForwardFFT(Field(n, 1)) # domain size not needed
 
 # ~ callable interface
 @inline (f::ForwardFFT{n})(u::Field{n}, uk::FTField{n}) where {n} =

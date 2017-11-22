@@ -7,44 +7,41 @@ import IMEXRKCB
 export KSEq, imex, LinearisedKSEq
 
 # ~~~ LINEAR TERM ~~~
-struct LinearKSEqTerm{n}
+struct LinearKSEqTerm{n, L}
     A::Vector{Float64}
-    L::Float64
-    LinearKSEqTerm{n}(L::Real) where {n} =
-        new{n}(Float64[(2π*k/L)^2 - (2π*k/L)^4 for k = 0:n], L)
+    LinearKSEqTerm{n, L}() where {n, L} =
+        new{n, L}(Float64[(2π*k/L)^2 - (2π*k/L)^4 for k = 0:n])
 end
-LinearKSEqTerm(n::Int, L::Real) = LinearKSEqTerm{n}(L)
+LinearKSEqTerm(n::Int, L::Real) = LinearKSEqTerm{n, L}()
 
 # obey IMEXRKCB interface
-Base.A_mul_B!(dukdt::FTField{n}, lks::LinearKSEqTerm{n}, uk::FTField{n}) where {n} =
+Base.A_mul_B!(dukdt::FTField{n, L}, lks::LinearKSEqTerm{n, L}, uk::FTField{n, L}) where {n, L} =
     (dukdt .= lks.A .* uk; dukdt)
 
-IMEXRKCB.ImcA!(lks::LinearKSEqTerm{n}, c::Real, uk::FTField{n}, dukdt::FTField{n}) where {n} =
+IMEXRKCB.ImcA!(lks::LinearKSEqTerm{n, L}, c::Real, uk::FTField{n, L}, dukdt::FTField{n, L}) where {n, L} =
     dukdt .= uk./(1 .- c.*lks.A)
 
 
 # ~~~ NONLINEAR TERM ~~~
-struct NonLinearKSEqTerm{n, FT<:FTField{n}, F<:Field{n}}
+struct NonLinearKSEqTerm{n, L, FT<:FTField{n, L}, F<:Field{n, L}}
      U::Float64 # mean flow velocity
-     L::Float64 # domain size
      u::F       # solution in physical space
     vk::FT      # temporary in Fourier space
     ifft        # plans
     fft         #
-    function NonLinearKSEqTerm{n}(U::Real, L::Real) where {n}
-        vk = FTField(n); ifft = InverseFFT(vk)
-        u  = Field(n);   fft  = ForwardFFT(u)
-        new{n, typeof(vk), typeof(u)}(U, L, u, vk, ifft, fft)
+    function NonLinearKSEqTerm{n, L}(U::Real) where {n, L}
+        vk = FTField(n, L); ifft = InverseFFT(vk)
+        u  = Field(n, L);   fft  = ForwardFFT(u)
+        new{n, L, typeof(vk), typeof(u)}(U, u, vk, ifft, fft)
     end
 end
 
-NonLinearKSEqTerm(n::Int, U::Real, L::Real) = NonLinearKSEqTerm{n}(U, L)
+NonLinearKSEqTerm(n::Int, U::Real, L::Real) = NonLinearKSEqTerm{n, L}(U)
 
-function (nlks::NonLinearKSEqTerm{n})(t::Real, uk::FTField{n}, dukdt::FTField{n}, add::Bool=false) where {n}
+function (nlks::NonLinearKSEqTerm{n, L})(t::Real, uk::FTField{n, L}, dukdt::FTField{n, L}, add::Bool=false) where {n, L}
     # setup
-    vk, u = nlks.vk, nlks.u  # aliases
-    L, U = nlks.L, nlks.U    # parameters
-    qk = 2π/L*(0:n)          # wave numbers
+    vk, u, U = nlks.vk, nlks.u, nlks.U # aliases
+    qk = 2π/L*(0:n)                    # wave numbers
 
     # compute nonlinear term using FFTs
     uk[0] = 0               # make sure mean is zero
@@ -60,51 +57,49 @@ end
 
 
 # ~~~ COMPLETE EQUATION ~~~
-struct KSEq{n, NL<:NonLinearKSEqTerm{n}}
-     lks::LinearKSEqTerm{n}
+struct KSEq{n, L, NL<:NonLinearKSEqTerm{n, L}}
+     lks::LinearKSEqTerm{n, L}
     nlks::NL
-    function KSEq{n}(U::Real, L::Real) where {n} 
+    function KSEq{n, L}(U::Real) where {n, L}
         exTerm = NonLinearKSEqTerm(n, U, L)
         imTerm = LinearKSEqTerm(n, L)
-        new{n, typeof(exTerm)}(imTerm, exTerm)
+        new{n, L, typeof(exTerm)}(imTerm, exTerm)
     end
 end
-KSEq(n::Int, U::Real, L::Real) = KSEq{n}( U, L)
+KSEq(n::Int, U::Real, L::Real) = KSEq{n, L}(U)
 
 # split linear and nonlinear term
 imex(KSEq) = KSEq.lks, KSEq.nlks
 
 # evaluate right hand side of equation
-(ks::KSEq{n})(t::Real, uk::FTField{n}, dukdt::FTField{n}) where {n}=
+(ks::KSEq{n, L})(t::Real, uk::FTField{n, L}, dukdt::FTField{n, L}) where {n, L} =
     (A_mul_B!(dukdt, ks.lks, uk);        # linear term
      ks.nlks(t, uk, dukdt, true); dukdt) # nonlinear term (add value)
 
 
 # ~~~ LINEARISED EQUATION ~~~
-struct LinearisedKSEq{n, FT<:FTField{n}, F<:Field{n}}
+struct LinearisedKSEq{n, L, FT<:FTField{n, L}, F<:Field{n, L}}
      U::Float64  # mean flow velocity
-     L::Float64  # domain size
     nk::FT       # temporary in Fourier space
      u::F        # temporary in physical space
      w::F        # temporary in physical space
     ifft         # plans
     fft          #
-    function LinearisedKSEq{n}(U::Real, L::Real) where {n}
-        u = Field(n); w = Field(n); nk = FTField(n)
+    function LinearisedKSEq{n, L}(U::Real) where {n, L}
+        u = Field(n, L); w = Field(n, L); nk = FTField(n, L)
         ifft = InverseFFT(nk); fft  = ForwardFFT(u)
-        new{n, typeof(nk), typeof(u)}(U, L, nk, u, w, ifft, fft)
+        new{n, L, typeof(nk), typeof(u)}(U, nk, u, w, ifft, fft)
     end
 end
 
-LinearisedKSEq(n::Int, U::Real, L::Real) = LinearisedKSEq{n}(U, L)
+LinearisedKSEq(n::Int, U::Real, L::Real) = LinearisedKSEq{n, L}(U)
 
 # ~~~ EVALUATE LINEAR OPERATOR AROUND U ~~~
-function (lks::LinearisedKSEq{n})(t::Real, uk::FTField{n}, wk::FTField{n}, dwkdt::FTField{n}) where {n}
+function (lks::LinearisedKSEq{n, L})(t::Real, uk::FTField{n, L}, wk::FTField{n, L}, dwkdt::FTField{n, L}) where {n, L}
     # setup
-    w, u, nk = lks.w, lks.u, lks.nk # aliases
-    L, U = lks.L, lks.U             # parameters
-    qk = 2π/L*(0:n)                 # wave numbers
-    uk[1] = 0; wk[1] = 0            # make sure zero mean
+    w, u, nk, U = lks.w, lks.u, lks.nk, lks.U # aliases
+    qk = 2π/L*(0:n)                           # wave numbers
+    uk[0] = 0; wk[0] = 0                      # make sure zero mean
 
     # ffts
     lks.ifft(uk, u)    # transform u to physical space
