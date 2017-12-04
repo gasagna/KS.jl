@@ -66,7 +66,7 @@ Base.similar(::FTField{n, L, T}) where {n, L, T} = FTField(n, L, T)
 Base.copy(uk::FTField{n, L}) where {n, L} = FTField(copy(uk.data), L)
 
 # ~ inner product and norm
-function Base.dot(uk::FTField{n}, vk::FTField{n}) where {n}
+function Base.dot(uk::FTField{n, L}, vk::FTField{n, L}) where {n, L}
     s = uk[0]*conj(vk[0])
     @simd for k = 1:n
         @inbounds s += uk[k]*conj(vk[k])
