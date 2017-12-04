@@ -43,8 +43,10 @@ WaveNumbers(n::Int, L::Real) = WaveNumbers(2π/L*(0:n), L)
 # L is the domain size
 struct FTField{n, L, T<:Complex, V<:AbstractVector{T}} <: AbstractFTField{n, L, T}
     data::V
-    FTField{n, L}(data::V) where {n, L, T, V<:AbstractVector{T}} = 
+    function FTField{n, L}(data::V) where {n, L, T, V<:AbstractVector{T}}
+        n+1 == length(data) || throw(ArgumentError("inconsistent input data"))
         new{n, L, T, V}(data)
+    end
 end
 
 # ~ outer constructors 
@@ -86,8 +88,8 @@ end
 struct Field{n, L, T<:Real, V<:AbstractVector{T}} <: AbstractField{n, L, T}
     data::V
     function Field{n, L}(data::V) where {n, L, T, V<:AbstractVector{T}}
-        isodd(length(data))  || error("input data must be even")
-        2n+1 == length(data) || error("inconsistent input data")
+        isodd(length(data))  || throw(ArgumentError("input data must be even"))
+        2n+1 == length(data) || throw(ArgumentError("inconsistent input data"))
         new{n, L, T, V}(data)
     end
 end
