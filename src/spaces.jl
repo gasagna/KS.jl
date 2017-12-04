@@ -2,7 +2,7 @@
 # Copyright 2017, Davide Lasagna, AFM, University of Southampton #
 # -------------------------------------------------------------- #
 
-export AbstractFTField, AbstractField, FTField, Field, WaveNumbers, fieldsize
+export AbstractFTField, AbstractField, FTField, Field, WaveNumbers, fieldsize, dotdiff
 
 # ~~~ abstract field types ~~~
 abstract type AbstractFTField{n, L, T} <: AbstractVector{T} end
