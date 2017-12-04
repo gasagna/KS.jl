@@ -76,11 +76,11 @@ end
 
 Base.norm(uk::FTField, p::Real...) = sqrt(dot(uk, uk))
 
-#
-function dotdiff(uk::FTField{n, L}, vk::FTField{n, L}) where {n, L}
+# squared norm of the difference: ||uk-vk||^2
+function normdiff(uk::FTField{n, L}, vk::FTField{n, L}) where {n, L}
     s = abs2(uk[0] - vk[0])
     @simd for k = 1:n
-        @inbounds s += abs2(uk[0] - vk[0])
+        @inbounds s += abs2(uk[k] - vk[k])
     end
     return 2*real(s)
 end
