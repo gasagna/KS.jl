@@ -67,8 +67,8 @@ Base.copy(uk::FTField{n, L}) where {n, L} = FTField(copy(uk.data), L)
 
 # ~ inner product and norm
 function Base.dot(uk::FTField{n}, vk::FTField{n}) where {n}
-    s = uk[1]*conj(vk[1])
-    @simd for k = 2:n
+    s = uk[0]*conj(vk[0])
+    @simd for k = 1:n
         @inbounds s += uk[k]*conj(vk[k])
     end
     return 2*real(s)
