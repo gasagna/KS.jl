@@ -19,7 +19,7 @@ ForwardFFT(n::Int) = ForwardFFT(Field(n, 1))
 
 # ~ callable interface
 @inline (f::ForwardFFT{n})(u::Field{n}, uk::FTField{n}) where {n} =
-    (FFTW.unsafe_execute!(f.plan, u.data, uk.data); uk .*= 1/2n; uk)
+    (FFTW.unsafe_execute!(f.plan, u.data, uk.data); uk .*= 1/(2n+1); uk)
 
 @inline (f::ForwardFFT{n})(u::VarField{n}, uk::VarFTField{n}) where {n} =
     (f(state(u), state(uk)); f(prime(u), prime(uk)); uk)
@@ -29,7 +29,7 @@ ForwardFFT(n::Int) = ForwardFFT(Field(n, 1))
 struct InverseFFT{n, P}
     plan::P
     function InverseFFT{n}(uk::AbstractFTField{n}) where {n}
-        plan = FFTW.plan_brfft(state(uk).data, 2n, flags=FFTW.PATIENT)
+        plan = FFTW.plan_brfft(state(uk).data, 2n+1, flags=FFTW.PATIENT)
         new{n, typeof(plan)}(plan)
     end
 end
