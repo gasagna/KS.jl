@@ -76,6 +76,15 @@ end
 
 Base.norm(uk::FTField, p::Real...) = sqrt(dot(uk, uk))
 
+#
+function dotdiff(uk::FTField{n, L}, vk::FTField{n, L}) where {n, L}
+    s = abs2(uk[0] - vk[0])
+    @simd for k = 1:n
+        @inbounds s += abs2(uk[0] - vk[0])
+    end
+    return 2*real(s)
+end
+
 # shifts
 function Base.shift!(uk::FTField{n, L}, s::Real) where {n, L}
     for k = 0:n
