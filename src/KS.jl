@@ -5,6 +5,7 @@
 module KS
 
 include("spaces.jl")
+include("variational.jl")
 include("ffts.jl")
 include("system.jl")
 
