@@ -203,6 +203,11 @@ end
     @test uk[0] ==   0.0
     @test uk[1] == ( 0.0 + im*0.5)*2π/4
     @test uk[2] == (-0.5 + im*0.0)*2π/4*2
+
+    # also test the in place version
+    vk = FTField(Complex{Float64}[0.0+im*0.0, 0.5+im*0.0, 0.0+im*0.5], 4)
+    ddx!(vk)
+    @test all(vk.data .== uk.data) == true # fixme
 end
 
 @testset "system                                 " begin

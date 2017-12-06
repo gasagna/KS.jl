@@ -2,7 +2,7 @@
 # Copyright 2017, Davide Lasagna, AFM, University of Southampton #
 # -------------------------------------------------------------- #
 
-export AbstractFTField, AbstractField, FTField, Field, WaveNumbers, fieldsize, dotdiff
+export AbstractFTField, AbstractField, FTField, Field, WaveNumbers, fieldsize, dotdiff, ddx!
 
 # ~~~ abstract field types ~~~
 abstract type AbstractFTField{n, L, T} <: AbstractVector{T} end
@@ -87,8 +87,16 @@ end
 
 # shifts
 function Base.shift!(uk::FTField{n, L}, s::Real) where {n, L}
-    for k = 0:n
-        uk[k] .*= exp(im*2π*s/L*k)
+    @simd for k = 0:n
+        @inbounds uk[k] .*= exp(im*2π*s/L*k)
+    end
+    uk
+end
+
+# x derivative, in-place
+function ddx!(uk::FTField{n, L}) where {n, L}
+    @simd for k = 0:n
+        @inbounds uk[k] = im*2π/L*k*uk[k]
     end
     uk
 end
