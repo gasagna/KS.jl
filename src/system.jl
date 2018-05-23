@@ -4,7 +4,7 @@
 
 import IMEXRKCB
 
-export KSEq, imex, LinearisedKSEq
+export KSEq, imex, LinearisedKSEq, SteadyForcing
 
 # ~~~ LINEAR TERM ~~~
 struct LinearKSEqTerm{n, L, W}
@@ -17,10 +17,10 @@ end
 LinearKSEqTerm(n::Int, L::Real) = LinearKSEqTerm{n, L}()
 
 # obey IMEXRKCB interface
-Base.A_mul_B!(dukdt::AbstractFTField{n, L}, lks::LinearKSEqTerm{n, L}, uk::AbstractFTField{n, L}) where {n, L} =
+@inline Base.A_mul_B!(dukdt::AbstractFTField{n, L}, lks::LinearKSEqTerm{n, L}, uk::AbstractFTField{n, L}) where {n, L} =
     (dukdt .= lks.A .* uk; dukdt)
 
-IMEXRKCB.ImcA!(lks::LinearKSEqTerm{n, L}, c::Real, uk::AbstractFTField{n, L}, dukdt::AbstractFTField{n, L}) where {n, L} =
+@inline IMEXRKCB.ImcA!(lks::LinearKSEqTerm{n, L}, c::Real, uk::AbstractFTField{n, L}, dukdt::AbstractFTField{n, L}) where {n, L} =
     dukdt .= uk./(1 .- c.*lks.A)
 
 
@@ -48,7 +48,7 @@ end
 NonLinearKSEqTerm(n::Int, U::Real, L::Real, mode::Symbol=:forward) = 
     NonLinearKSEqTerm{n, L}(U, mode)
 
-function (nlks::NonLinearKSEqTerm{n, L, FT})(t::Real,
+@inline function (nlks::NonLinearKSEqTerm{n, L, FT})(t::Real,
                                              uk::FT,
                                              dukdt::FT,
                                              add::Bool=false) where {n, L, FT<:AbstractFTField{n, L}}
@@ -68,28 +68,56 @@ function (nlks::NonLinearKSEqTerm{n, L, FT})(t::Real,
     dukdt[0] = 0; return dukdt                   # make sure mean does not change
 end
 
+# ~~~ FORCING ~~~
+abstract type AbstractForcing{n, L} end
+
+struct SteadyForcing{n, L, FT<:AbstractFTField{n, L}} <: AbstractForcing{n, L}
+	hk::FT
+end
+SteadyForcing(hk::AbstractFTField{n, L}) where {n, L} = 
+	SteadyForcing{n, L, typeof(hk)}(hk)
+
+# allow indexing this 
+Base.getindex(sf::SteadyForcing, i::Int) = sf.hk[i]
+Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.hk[i] = val)
+
+# add to dukdt by default
+@inline (sf::SteadyForcing{n, L, FT})(t::Real, uk::FT, dukdt::FT) where {n, L, FT<:AbstractFTField{n, L}} =
+	(dukdt .+= sf.hk; return dukdt)
 
 # ~~~ COMPLETE EQUATION ~~~
-struct KSEq{n, L, NLIN<:NonLinearKSEqTerm{n, L}, LIN<:LinearKSEqTerm{n, L}}
-     lks::LIN
-    nlks::NLIN
-    function KSEq{n, L}(U::Real, mode::Symbol) where {n, L}
+struct KSEq{n, L, LIN<:LinearKSEqTerm{n, L}, NLIN<:NonLinearKSEqTerm{n, L}, G<:Union{AbstractForcing{n, L}, Void}}
+        lks::LIN
+       nlks::NLIN
+    forcing::G
+    function KSEq{n, L}(U::Real, mode::Symbol, forcing::G) where {n, L, G}
         nlks = NonLinearKSEqTerm(n, U, L, mode)
         lks  = LinearKSEqTerm(n, L)
-        new{n, L, typeof(nlks), typeof(lks)}(lks, nlks)
+        new{n, L, typeof(lks), typeof(nlks), typeof(forcing)}(lks, nlks, forcing)
     end
 end
-KSEq(n::Int, U::Real, L::Real, mode::Symbol=:forward) = KSEq{n, L}(U, mode)
+KSEq(n::Int, 
+	 U::Real, 
+	 L::Real, 
+	 mode::Symbol=:forward, 
+	 forcing::Union{AbstractForcing, Void}=nothing) = KSEq{n, L}(U, mode, forcing)
 
-# split linear and nonlinear term
-imex(KSEq) = KSEq.lks, KSEq.nlks
+# split into implicit and explicit terms
+function imex(ks::KSEq{n, L, LIN, NLIN, G}) where {n, L, LIN, NLIN, G<:Union{AbstractForcing{n, L}, Void}}
+	@inline function wrapper(t::Real, uk::AbstractFTField{n, L}, dukdt::AbstractFTField{n, L})
+		ks.nlks(t, uk, dukdt, false)                     # eval nonlinear term
+		G <: AbstractForcing && ks.forcing(t, uk, dukdt) # only eval if there is a forcing
+		return dukdt
+	end
+	return ks.lks, wrapper
+end
 
-# FIXME: enforce typing
 # evaluate right hand side of equation
-(ks::KSEq{n, L})(t::Real, uk::FT, dukdt::FT) where {n, L, FT<:AbstractFTField{n, L}} =
-    (A_mul_B!(dukdt, ks.lks, uk);        # linear term
-     ks.nlks(t, uk, dukdt, true); dukdt) # nonlinear term (add value)
-
+@inline (ks::KSEq{n, L, LIN, NLIN, G})(t::Real, uk::FT, dukdt::FT) where {n, L, LIN, NLIN, G, FT<:AbstractFTField{n, L}} =
+    (A_mul_B!(dukdt, ks.lks, uk);                      # linear term
+     ks.nlks(t, uk, dukdt, true);                      # nonlinear term (add value)
+     G <: AbstractForcing && ks.forcing(t, uk, dukdt); # add forcing
+     return dukdt) 
 
 # ~~~ LINEARISED EQUATION ~~~
 struct LinearisedKSEq{n, L, FT<:FTField{n, L}, F<:Field{n, L}}
