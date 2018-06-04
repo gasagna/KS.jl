@@ -1,37 +1,43 @@
-# -------------------------------------------------------------- #
-# Copyright 2017, Davide Lasagna, AFM, University of Southampton #
-# -------------------------------------------------------------- #
+# ----------------------------------------------------------------- #
+# Copyright 2017-18, Davide Lasagna, AFM, University of Southampton #
+# ----------------------------------------------------------------- #
 
 import IMEXRKCB
 
-export KSEq, imex, LinearisedKSEq, SteadyForcing
+export KSEq, 
+       imex, 
+       LinearisedKSEq, 
+       SteadyForcing
 
-# ~~~ LINEAR TERM ~~~
-struct LinearKSEqTerm{n, L, W}
-    A::W
-    function LinearKSEqTerm{n, L}() where {n, L}
-        qk = WaveNumbers([qk^2 - qk^4 for qk = 2π/L*(0:n)], L)
-        new{n, L, typeof(qk)}(qk)
+# ////// LINEAR TERM //////
+struct LinearKSEqTerm{n, FT<:AbstractFTField{n}}
+    A::FT
+    function LinearKSEqTerm{n}(L::Real) where {n}
+        qk = FTField(n, L)
+        for k = 1:n
+            qk[k] = (2π/L*k)^2 - (2π/L*k)^4
+        end
+        new{n, typeof(qk)}(qk)
     end
 end
-LinearKSEqTerm(n::Int, L::Real) = LinearKSEqTerm{n, L}()
+LinearKSEqTerm(n::Int, L::Real) = LinearKSEqTerm{n}(L)
 
 # obey IMEXRKCB interface
-@inline Base.A_mul_B!(dukdt::AbstractFTField{n, L}, lks::LinearKSEqTerm{n, L}, uk::AbstractFTField{n, L}) where {n, L} =
+@inline Base.A_mul_B!(dukdt::AbstractFTField{n}, lks::LinearKSEqTerm{n}, uk::AbstractFTField{n}) where {n} =
     (dukdt .= lks.A .* uk; dukdt)
 
-@inline IMEXRKCB.ImcA!(lks::LinearKSEqTerm{n, L}, c::Real, uk::AbstractFTField{n, L}, dukdt::AbstractFTField{n, L}) where {n, L} =
+@inline IMEXRKCB.ImcA!(lks::LinearKSEqTerm{n}, c::Real, uk::AbstractFTField{n}, dukdt::AbstractFTField{n}) where {n} =
     dukdt .= uk./(1 .- c.*lks.A)
 
 
-# ~~~ NONLINEAR TERM ~~~
-struct NonLinearKSEqTerm{n, L, FT<:AbstractFTField{n, L}, F<:AbstractField{n, L}}
+# ////// NONLINEAR TERM //////
+struct NonLinearKSEqTerm{n, ISODD, FT<:AbstractFTField{n}, F<:AbstractField{n}}
      U::Float64 # mean flow velocity
     vk::FT      # temporary in Fourier space
      u::F       # solution in physical space
     ifft        # plans
     fft         #
-    function NonLinearKSEqTerm{n, L}(U::Real, mode::Symbol) where {n, L}
+    function NonLinearKSEqTerm{n, ISODD}(L::Real, U::Real, mode::Symbol) where {n, ISODD}
         if mode == :forward
             vk = FTField(n, L); u = Field(n, L)
         elseif mode == :tangent
@@ -41,117 +47,119 @@ struct NonLinearKSEqTerm{n, L, FT<:AbstractFTField{n, L}, F<:AbstractField{n, L}
                                 " Must be :forward or :tangent"))
         end
         fft, ifft = ForwardFFT(u), InverseFFT(vk)
-        new{n, L, typeof(vk), typeof(u)}(U, vk, u, ifft, fft)
+        new{n, ISODD, typeof(vk), typeof(u)}(U, vk, u, ifft, fft)
     end
 end
 
-NonLinearKSEqTerm(n::Int, U::Real, L::Real, mode::Symbol=:forward) = 
-    NonLinearKSEqTerm{n, L}(U, mode)
+NonLinearKSEqTerm(n::Int, L::Real, U::Real, ISODD::Bool, mode::Symbol=:forward) = 
+    NonLinearKSEqTerm{n, ISODD}(L, U, mode)
 
-@inline function (nlks::NonLinearKSEqTerm{n, L, FT})(t::Real,
-                                             uk::FT,
-                                             dukdt::FT,
-                                             add::Bool=false) where {n, L, FT<:AbstractFTField{n, L}}
-    # setup
-    vk, u, U = nlks.vk, nlks.u, nlks.U # aliases
-    qk = WaveNumbers(n, L)             # wave numbers
+@inline function (nlks::NonLinearKSEqTerm{n, ISODD, FT})(t::Real,
+                                                         uk::FT,
+                                                         dukdt::FT,
+                                                         add::Bool=false) where {n, ISODD, FT<:AbstractFTField{n}}
+    _set_symmetry!(Val{ISODD}, uk)         # enforce symmetries
+    nlks.ifft(uk, nlks.u)                  # copy and inverse transform
+    nlks.u .= .- 0.5.*(nlks.U.+nlks.u).^2  # sum U, square and divide by 2
+    nlks.fft(nlks.u, nlks.vk)              # forward transform
+    ddx!(nlks.vk)                          # differentiate
+    _set_symmetry!(Val{ISODD}, nlks.vk)    # enforce symmetries
 
-    # compute nonlinear term using FFTs
-    uk[0] = 0               # make sure mean is zero
-    nlks.ifft(vk .= uk, u)  # copy and inverse transform
-    u .= .- 0.5.*(U.+u).^2  # sum U, square and divide by 2
-    nlks.fft(u, vk)         # forward transform
-    vk .*= im.*qk           # differentiate
-
-    # add terms and return
-    add == true ? (dukdt .+= vk) : (dukdt .= vk) # note minus sign on rhs
-    dukdt[0] = 0; return dukdt                   # make sure mean does not change
+    add == true ? (dukdt .+= nlks.vk) : (dukdt .= nlks.vk)
+    dukdt
 end
 
-# ~~~ FORCING ~~~
-abstract type AbstractForcing{n, L} end
+# enforce symmetries, if needed
+_set_symmetry!(::Val{true},  uk::FTField{n}) where {n} = (uk .= im.*imag.(uk); uk)
+_set_symmetry!(::Val{false}, uk::FTField{n}) where {n} = uk
 
-struct SteadyForcing{n, L, FT<:AbstractFTField{n, L}} <: AbstractForcing{n, L}
-	hk::FT
+
+# ////// FORCING //////
+abstract type AbstractForcing{n} end
+
+struct SteadyForcing{n, FT<:AbstractFTField{n}} <: AbstractForcing{n}
+    hk::FT
 end
-SteadyForcing(hk::AbstractFTField{n, L}) where {n, L} = 
-	SteadyForcing{n, L, typeof(hk)}(hk)
+SteadyForcing(hk::AbstractFTField{n}) where {n} = SteadyForcing{n, typeof(hk)}(hk)
 
 # allow indexing this 
 Base.getindex(sf::SteadyForcing, i::Int) = sf.hk[i]
 Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.hk[i] = val)
 
 # add to dukdt by default
-@inline (sf::SteadyForcing{n, L, FT})(t::Real, uk::FT, dukdt::FT) where {n, L, FT<:AbstractFTField{n, L}} =
-	(dukdt .+= sf.hk; return dukdt)
+@inline (sf::SteadyForcing{n, FT})(t::Real, uk::FT, dukdt::FT) where {n, FT<:AbstractFTField{n}} =
+    (dukdt .+= sf.hk; return dukdt)
 
-# ~~~ COMPLETE EQUATION ~~~
-struct KSEq{n, L, LIN<:LinearKSEqTerm{n, L}, NLIN<:NonLinearKSEqTerm{n, L}, G<:Union{AbstractForcing{n, L}, Void}}
+
+# ////// COMPLETE EQUATION //////
+struct KSEq{n, ISODD, LIN<:LinearKSEqTerm{n}, NLIN<:NonLinearKSEqTerm{n, ISODD}, G<:Union{AbstractForcing{n}, Void}}
         lks::LIN
        nlks::NLIN
     forcing::G
-    function KSEq{n, L}(U::Real, mode::Symbol, forcing::G) where {n, L, G}
-        nlks = NonLinearKSEqTerm(n, U, L, mode)
+    function KSEq{n, ISODD}(L::Real, U::Real, mode::Symbol, forcing::G) where {n, ISODD, G}
+        nlks = NonLinearKSEqTerm(n, L, U, ISODD, mode)
         lks  = LinearKSEqTerm(n, L)
-        new{n, L, typeof(lks), typeof(nlks), typeof(forcing)}(lks, nlks, forcing)
+        new{n, ISODD, typeof(lks), typeof(nlks), typeof(forcing)}(lks, nlks, forcing)
     end
 end
+
 KSEq(n::Int, 
-	 U::Real, 
-	 L::Real, 
-	 mode::Symbol=:forward, 
-	 forcing::Union{AbstractForcing, Void}=nothing) = KSEq{n, L}(U, mode, forcing)
+     L::Real, 
+     U::Real, 
+     ISODD::Bool,
+     mode::Symbol=:forward, 
+     forcing::Union{AbstractForcing, Void}=nothing) = KSEq{n, ISODD}(L, U, mode, forcing)
 
 # split into implicit and explicit terms
-function imex(ks::KSEq{n, L, LIN, NLIN, G}) where {n, L, LIN, NLIN, G<:Union{AbstractForcing{n, L}, Void}}
-	@inline function wrapper(t::Real, uk::AbstractFTField{n, L}, dukdt::AbstractFTField{n, L})
-		ks.nlks(t, uk, dukdt, false)                     # eval nonlinear term
-		G <: AbstractForcing && ks.forcing(t, uk, dukdt) # only eval if there is a forcing
-		return dukdt
-	end
-	return ks.lks, wrapper
+function imex(ks::KSEq{n, ISODD, LIN, NLIN, G}) where {n, ISODD, LIN, NLIN, G<:Union{AbstractForcing{n}, Void}}
+    @inline function wrapper(t::Real, uk::AbstractFTField{n}, dukdt::AbstractFTField{n})
+        ks.nlks(t, uk, dukdt, false)                     # eval nonlinear term
+        G <: AbstractForcing && ks.forcing(t, uk, dukdt) # only eval if there is a forcing
+        return dukdt
+    end
+    return ks.lks, wrapper
 end
 
 # evaluate right hand side of equation
-@inline (ks::KSEq{n, L, LIN, NLIN, G})(t::Real, uk::FT, dukdt::FT) where {n, L, LIN, NLIN, G, FT<:AbstractFTField{n, L}} =
+@inline (ks::KSEq{n, ISODD, LIN, NLIN, G})(t::Real, uk::FT, dukdt::FT) where {n, ISODD, LIN, NLIN, G, FT<:AbstractFTField{n}} =
     (A_mul_B!(dukdt, ks.lks, uk);                      # linear term
      ks.nlks(t, uk, dukdt, true);                      # nonlinear term (add value)
      G <: AbstractForcing && ks.forcing(t, uk, dukdt); # add forcing
      return dukdt) 
 
-# ~~~ LINEARISED EQUATION ~~~
-struct LinearisedKSEq{n, L, FT<:FTField{n, L}, F<:Field{n, L}}
-     U::Float64  # mean flow velocity
-    nk::FT       # temporary in Fourier space
-     u::F        # temporary in physical space
-     w::F        # temporary in physical space
-    ifft         # plans
-    fft          #
-    function LinearisedKSEq{n, L}(U::Real) where {n, L}
-        u = Field(n, L); w = Field(n, L); nk = FTField(n, L)
-        ifft = InverseFFT(nk); fft  = ForwardFFT(u)
-        new{n, L, typeof(nk), typeof(u)}(U, nk, u, w, ifft, fft)
-    end
-end
 
-LinearisedKSEq(n::Int, U::Real, L::Real) = LinearisedKSEq{n, L}(U)
+# # ////// LINEARISED EQUATION //////
+# struct LinearisedKSEq{n, FT<:FTField{n}, F<:Field{n}}
+#      U::Float64  # mean flow velocity
+#     nk::FT       # temporary in Fourier space
+#      u::F        # temporary in physical space
+#      w::F        # temporary in physical space
+#     ifft         # plans
+#     fft          #
+#     function LinearisedKSEq{n}(L::Real, U::Real) where {n}
+#         u = Field(n, L); w = Field(n, L); nk = FTField(n, L)
+#         ifft = InverseFFT(nk); fft  = ForwardFFT(u)
+#         new{n, L, typeof(nk), typeof(u)}(U, nk, u, w, ifft, fft)
+#     end
+# end
 
-# ~~~ EVALUATE LINEAR OPERATOR AROUND U ~~~
-function (lks::LinearisedKSEq{n, L})(t::Real, uk::FTField{n, L}, wk::FTField{n, L}, dwkdt::FTField{n, L}) where {n, L}
-    # setup
-    w, u, nk, U = lks.w, lks.u, lks.nk, lks.U # aliases
-    qk = WaveNumbers(n, L)                    # wave numbers
-    uk[0] = 0; wk[0] = 0                      # make sure zero mean
+# LinearisedKSEq(n::Int, L::Real, U::Real) = LinearisedKSEq{n}(L, U)
 
-    # ffts
-    lks.ifft(uk, u)    # transform u to physical space
-    lks.ifft(wk, w)    # transform w to physical space
+# # evaluate linear operator around u
+# function (lks::LinearisedKSEq{n})(t::Real, uk::FTField{n}, wk::FTField{n}, dwkdt::FTField{n}) where {n}
+#     # ffts
+#     lks.ifft(uk, lks.u)    # transform u to physical space
+#     lks.ifft(wk, lks.w)    # transform w to physical space
 
-    # compute term  -(u + U)*w, in place over u
-    u .= .- (u .+ U).*w # compute product in physical space
-    lks.fft(u, dwkdt)   # transform to Fourier space
-    dwkdt .*= im.*qk    # differentiate
+#     # compute term  -(u + U)*w, in place over u
+#     lks.u .= .- (lks.u .+ U).*lks.w  # compute product in physical space
+#     lks.fft(lks.u, dwkdt)            # transform to Fourier space
+    
+#     for k = 1:n
+#         qk = 2π*k/L
+#         dwkdt[k] *= im*qk*dwdt[k]       # differentiate 
+#         dwkdt[k] += wk[k]*(qk^2 - qk^4) # add terms w₂ₓ - w₄ₓ
+#     end   
    
-    # compute term  -w₂ₓ - w₄ₓ and return
-    dwkdt .+= wk.*(qk.^2 .- qk.^4); return dwkdt # differentiate wk, add other term
-end
+#     dwkdt
+# end
