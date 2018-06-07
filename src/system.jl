@@ -10,24 +10,24 @@ export KSEq,
        SteadyForcing
 
 # ////// LINEAR TERM //////
-struct LinearKSEqTerm{n, FT<:AbstractFTField{n}}
+struct LinearKSEqTerm{n, ISODD, FT<:AbstractFTField{n}}
     A::FT
-    function LinearKSEqTerm{n}(L::Real) where {n}
+    function LinearKSEqTerm{n, ISODD}(L::Real) where {n, ISODD}
         qk = FTField(n, L)
         for k = 1:n
             qk[k] = (2π/L*k)^2 - (2π/L*k)^4
         end
-        new{n, typeof(qk)}(qk)
+        new{n, ISODD, typeof(qk)}(qk)
     end
 end
-LinearKSEqTerm(n::Int, L::Real) = LinearKSEqTerm{n}(L)
+LinearKSEqTerm(n::Int, L::Real, ISODD::Bool) = LinearKSEqTerm{n, ISODD}(L)
 
 # obey IMEXRKCB interface
-@inline Base.A_mul_B!(dukdt::AbstractFTField{n}, lks::LinearKSEqTerm{n}, uk::AbstractFTField{n}) where {n} =
-    (dukdt .= lks.A .* uk; dukdt)
+@inline Base.A_mul_B!(dukdt::AbstractFTField{n}, lks::LinearKSEqTerm{n, ISODD}, uk::AbstractFTField{n}) where {n, ISODD} =
+    (_set_symmetry!(Val(ISODD), uk); dukdt .= lks.A .* uk; dukdt)
 
-@inline IMEXRKCB.ImcA!(lks::LinearKSEqTerm{n}, c::Real, uk::AbstractFTField{n}, dukdt::AbstractFTField{n}) where {n} =
-    dukdt .= uk./(1 .- c.*lks.A)
+@inline IMEXRKCB.ImcA!(lks::LinearKSEqTerm{n, ISODD}, c::Real, uk::AbstractFTField{n}, dukdt::AbstractFTField{n}) where {n, ISODD} =
+    (_set_symmetry!(Val(ISODD), uk); dukdt .= uk./(1 .- c.*lks.A); dukdt)
 
 
 # ////// NONLINEAR TERM //////
@@ -58,20 +58,20 @@ NonLinearKSEqTerm(n::Int, L::Real, U::Real, ISODD::Bool, mode::Symbol=:forward) 
                                                          uk::FT,
                                                          dukdt::FT,
                                                          add::Bool=false) where {n, ISODD, FT<:AbstractFTField{n}}
-    _set_symmetry!(Val{ISODD}, uk)         # enforce symmetries
+    _set_symmetry!(Val(ISODD), uk)         # enforce symmetries
     nlks.ifft(uk, nlks.u)                  # copy and inverse transform
     nlks.u .= .- 0.5.*(nlks.U.+nlks.u).^2  # sum U, square and divide by 2
     nlks.fft(nlks.u, nlks.vk)              # forward transform
     ddx!(nlks.vk)                          # differentiate
-    _set_symmetry!(Val{ISODD}, nlks.vk)    # enforce symmetries
+    _set_symmetry!(Val(ISODD), nlks.vk)    # enforce symmetries
 
     add == true ? (dukdt .+= nlks.vk) : (dukdt .= nlks.vk)
     dukdt
 end
 
 # enforce symmetries, if needed
-_set_symmetry!(::Val{true},  uk::FTField{n}) where {n} = (uk .= im.*imag.(uk); uk)
-_set_symmetry!(::Val{false}, uk::FTField{n}) where {n} = uk
+_set_symmetry!(::Val{true},  uk::FTField) = (uk .= im.*imag.(uk); uk)
+_set_symmetry!(::Val{false}, uk::FTField) = uk
 
 
 # ////// FORCING //////
@@ -98,7 +98,7 @@ struct KSEq{n, ISODD, LIN<:LinearKSEqTerm{n}, NLIN<:NonLinearKSEqTerm{n, ISODD},
     forcing::G
     function KSEq{n, ISODD}(L::Real, U::Real, mode::Symbol, forcing::G) where {n, ISODD, G}
         nlks = NonLinearKSEqTerm(n, L, U, ISODD, mode)
-        lks  = LinearKSEqTerm(n, L)
+        lks  = LinearKSEqTerm(n, L, ISODD)
         new{n, ISODD, typeof(lks), typeof(nlks), typeof(forcing)}(lks, nlks, forcing)
     end
 end

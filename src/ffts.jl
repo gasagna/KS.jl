@@ -9,8 +9,8 @@ export ForwardFFT,
 
 
 # //// UTILS //////
-_fix_FFT!(uk::FTField{n}) where {n} = 
-	(@inbounds uk.data[1] = 0; @inbounds uk.data[n+1] = 0; uk)
+_fix_FFT!(uk::FTField{n}) where {n} =
+	(@inbounds uk.data[1] = 0; @inbounds uk.data[n+2] = 0; uk)
 
 _normalise!(uk::FTField{n}) where {n} = (uk .*= 1/(2*(n+1)); uk)
 
