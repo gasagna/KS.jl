@@ -1,127 +1,105 @@
-# -------------------------------------------------------------- #
-# Copyright 2017, Davide Lasagna, AFM, University of Southampton #
-# -------------------------------------------------------------- #
+# ----------------------------------------------------------------- #
+# Copyright 2017-18, Davide Lasagna, AFM, University of Southampton #
+# ----------------------------------------------------------------- #
 
-export AbstractFTField, AbstractField, FTField, Field, WaveNumbers, fieldsize, dotdiff, ddx!
+export AbstractFTField,
+       AbstractField,
+       FTField,
+       Field,
+       WaveNumbers,
+       fieldsize,
+       mesh
 
-# ~~~ abstract field types ~~~
-abstract type AbstractFTField{n, L, T} <: AbstractVector{T} end
-abstract type AbstractField{n, L, T}   <: AbstractVector{T} end
+# ////// ABSTRACT FIELD TYPES //////
+abstract type AbstractFTField{n, T} <: AbstractVector{T} end
+abstract type AbstractField{n, T}   <: AbstractVector{T} end
 
-# ~ indexing is zero based
-Base.indices(::AbstractFTField{n}) where {n} = (0:n,)
-Base.linearindices(::AbstractFTField{n}) where {n} = 0:n
+
+# ////// ABSTRACTARRAY INTERFACE //////
+Base.size(uk::AbstractFTField{n}) where {n} = (n,)
+# TODO: make this from zero to ...
+Base.size(uk::AbstractField{n}) where {n} = (2*(n+1),)
+
 Base.IndexStyle(::Type{<:AbstractFTField}) = Base.IndexLinear()
-
-Base.indices(::AbstractField{n}) where {n} = (0:2n,)
-Base.linearindices(::AbstractField{n}) where {n} = 0:2n
 Base.IndexStyle(::Type{<:AbstractField}) = Base.IndexLinear()
 
-# extract parameters
-fieldsize(::AbstractField{n})   where {n} = n
-fieldsize(::AbstractFTField{n}) where {n} = n
 
-# ~~~ WAVE NUMBER VECTOR ~~~
-struct WaveNumbers{n, L, Q} <: AbstractFTField{n, L, Float64}
-    data::Q
-    function WaveNumbers{n, L}(data::Q) where {n, L, Q}
-        @assert n == length(data)-1
-        new{n, L, Q}(data)
-    end
-end
-
-WaveNumbers(data::AbstractVector, L::Real) = WaveNumbers{length(data)-1, L}(data)
-WaveNumbers(n::Int, L::Real) = WaveNumbers(2π/L*(0:n), L)
-
-@inline Base.getindex(qk::WaveNumbers, i::Integer) =
-    (@boundscheck checkbounds(qk.data, i+1); 
-     @inbounds ret = qk.data[i+1]; ret)
-
-
-# ~~~ SOLUTION IN FOURIER SPACE ~~~
-# n is the largest wave number
-# L is the domain size
-struct FTField{n, L, T<:Complex, V<:AbstractVector{T}} <: AbstractFTField{n, L, T}
+# ////// FULL SOLUTION IN FOURIER SPACE //////
+struct FTField{n, T<:Complex, V<:AbstractVector{T}} <: AbstractFTField{n, T}
     data::V
-    function FTField{n, L}(data::V) where {n, L, T, V<:AbstractVector{T}}
-        n+1 == length(data) || throw(ArgumentError("inconsistent input data"))
-        new{n, L, T, V}(data)
+    L::Float64
+    function FTField{n}(data::V, L::Real) where {n, T<:Complex, V<:AbstractVector{T}}
+        L > 0 || throw(ArgumentError("domain size must be positive"))
+        n == length(data) || throw(ArgumentError("inconsistent input data"))
+        new{n, T, V}(vcat(zero(T), data, zero(T)), L)
     end
 end
 
-# ~ outer constructors 
-FTField(n::Int, L::Real, ::Type{T}=Complex128) where {T} = FTField(zeros(T, n+1), L)
-FTField(data::AbstractVector, L::Real) = FTField{length(data)-1, L}(data)
 
-# ~ array interface
+# ////// outer constructors //////
+FTField(n::Int, L::Real) = FTField{n}(zeros(Complex{Float64}, n), L)
+
+# ////// array interface //////
 @inline Base.getindex(uk::FTField, i::Integer) =
-    (@boundscheck checkbounds(uk.data, i+1); 
-     @inbounds ret = uk.data[i+1]; ret)
+    (@boundscheck checkbounds(uk, i); getindex(uk.data, i+1))
 
 @inline Base.setindex!(uk::FTField, val, i::Integer) =
-    (@boundscheck checkbounds(uk.data, i+1); 
-     @inbounds uk.data[i+1] = val; val)
+    (@boundscheck checkbounds(uk, i); setindex!(uk.data, val, i+1))
 
-Base.similar(::FTField{n, L, T}) where {n, L, T} = FTField(n, L, T)
-Base.copy(uk::FTField{n, L}) where {n, L} = FTField(copy(uk.data), L)
+Base.similar(uk::FTField{n}) where {n} = FTField(n, uk.L)
+Base.copy(uk::FTField) = (vk = similar(uk); vk .= uk; vk)
 
-# ~ inner product and norm
-function Base.dot(uk::FTField{n, L}, vk::FTField{n, L}) where {n, L}
-    s = uk[0]*conj(vk[0])
-    @simd for k = 1:n
-        @inbounds s += uk[k]*conj(vk[k])
-    end
-    return 2*real(s)
-end
 
-Base.norm(uk::FTField, p::Real...) = sqrt(dot(uk, uk))
+# ////// inner product and norm //////
+Base.dot(uk::FTField{n}, vk::FTField{n}) where {n} =
+    2*real(sum(uki*conj(vki) for (uki, vki) in zip(uk, vk)))
 
-# squared norm of the difference: ||uk-vk||^2
-function dotdiff(uk::FTField{n, L}, vk::FTField{n, L}) where {n, L}
-    s = abs2(uk[0] - vk[0])
-    @simd for k = 1:n
-        @inbounds s += abs2(uk[k] - vk[k])
-    end
-    return 2*real(s)
-end
+Base.norm(uk::FTField) = sqrt(dot(uk, uk))
 
-# shifts
-function Base.shift!(uk::FTField{n, L}, s::Real) where {n, L}
-    @simd for k = 0:n
-        @inbounds uk[k] .*= exp(im*2π*s/L*k)
-    end
-    uk
-end
 
-# x derivative, in-place
-function ddx!(uk::FTField{n, L}) where {n, L}
-    @simd for k = 0:n
-        @inbounds uk[k] = im*2π/L*k*uk[k]
-    end
-    uk
-end
+# ////// squared norm of the difference //////
+dotdiff(uk::FTField{n}, vk::FTField{n}) where {n} =
+    2*real(sum(abs2(uki-vki) for (uki, vki) in zip(uk, vk)))
 
-# ~~~ SOLUTION IN PHYSICAL SPACE ~~~
-struct Field{n, L, T<:Real, V<:AbstractVector{T}} <: AbstractField{n, L, T}
+
+# ////// shifts and differentiation //////
+Base.shift!(uk::FTField{n}, s::Real) where {n} =
+    (uk .*= exp.(im.*2π.*s./uk.L.*(1:n)); uk)
+
+ddx!(uk::FTField{n}) where {n} = (uk .*= im.*2π./uk.L.*(1:n); uk)
+
+
+# ////// SOLUTION IN PHYSICAL SPACE //////
+struct Field{n, T<:Real, V<:AbstractVector{T}} <: AbstractField{n, T}
     data::V
-    function Field{n, L}(data::V) where {n, L, T, V<:AbstractVector{T}}
-        isodd(length(data))  || throw(ArgumentError("input data must be even"))
-        2n+1 == length(data) || throw(ArgumentError("inconsistent input data"))
-        new{n, L, T, V}(data)
+    L::Float64
+    function Field{n}(data::V, L::Real) where {n, T, V<:AbstractVector{T}}
+        L > 0 || throw(ArgumentError("domain size must be positive"))
+        isodd(length(data)) && throw(ArgumentError("input data length must be even"))
+        length(data) == 2*(n+1) || throw(ArgumentError("inconsistent input data"))
+        new{n, T, V}(data, L)
     end
 end
 
-# ~ outer constructors
-Field(n::Int, L::Real, ::Type{T}=Float64) where {T} = Field(zeros(T, 2n+1), L)
-Field(data::AbstractVector, L::Real) = Field{(length(data)-1)>>1, L}(data)
 
-# ~ array interface
+# ////// outer constructors /////
+Field(n::Int, L::Real) = Field{n}(zeros(2*(n+1)), L)
+
+
+# ////// array interface //////
 @inline Base.getindex(u::Field, i::Integer) =
-    (@boundscheck checkbounds(u.data, i+1); 
-     @inbounds ret = u.data[i+1]; ret)
+    (@boundscheck checkbounds(u, i);
+        @inbounds ret = u.data[i]; ret)
 
 @inline Base.setindex!(u::Field, val, i::Integer) =
-    (@boundscheck checkbounds(u.data, i+1); 
-     @inbounds u.data[i+1] = val; val)
+    (@boundscheck checkbounds(u, i);
+        @inbounds u.data[i] = val; val)
 
-Base.similar(::Field{n, L, T}) where {n, L, T} = Field(n, L, T)
+Base.similar(u::Field{n}) where {n} = Field(n, u.L)
+Base.copy(u::Field) = (v = similar(u); v .= u; v)
+
+
+# ////// MESH //////
+mesh(n::Int, L::Real) = linspace(0, L, 2*(n+1)+1)[1:2*(n+1)]
+mesh(u::Field{n}) where {n} = mesh(n, u.L)
+mesh(uk::FTField{n}) where {n} = mesh(n, uk.L)
