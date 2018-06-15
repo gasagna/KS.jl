@@ -7,7 +7,8 @@ module KS
 include("spaces.jl")
 include("variational.jl")
 include("ffts.jl")
+include("forcing.jl")
+include("matvec.jl")
 include("system.jl")
-# include("vector.jl")
 
 end

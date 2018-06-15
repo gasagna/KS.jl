@@ -5,9 +5,7 @@
 import IMEXRKCB
 
 export KSEq, 
-       imex, 
-       LinearisedKSEq, 
-       SteadyForcing
+       imex
 
 # ////// LINEAR TERM //////
 struct LinearKSEqTerm{n, ISODD, FT<:AbstractFTField{n}}
@@ -70,25 +68,8 @@ NonLinearKSEqTerm(n::Int, L::Real, U::Real, ISODD::Bool, mode::Symbol=:forward) 
 end
 
 # enforce symmetries, if needed
-_set_symmetry!(::Val{true},  uk::FTField) = (uk .= im.*imag.(uk); uk)
-_set_symmetry!(::Val{false}, uk::FTField) = uk
-
-
-# ////// FORCING //////
-abstract type AbstractForcing{n} end
-
-struct SteadyForcing{n, FT<:AbstractFTField{n}} <: AbstractForcing{n}
-    hk::FT
-end
-SteadyForcing(hk::AbstractFTField{n}) where {n} = SteadyForcing{n, typeof(hk)}(hk)
-
-# allow indexing this 
-Base.getindex(sf::SteadyForcing, i::Int) = sf.hk[i]
-Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.hk[i] = val)
-
-# add to dukdt by default
-@inline (sf::SteadyForcing{n, FT})(t::Real, uk::FT, dukdt::FT) where {n, FT<:AbstractFTField{n}} =
-    (dukdt .+= sf.hk; return dukdt)
+_set_symmetry!(::Val{true},  uk::AbstractFTField) = (uk .= im.*imag.(uk); uk)
+_set_symmetry!(::Val{false}, uk::AbstractFTField) = uk
 
 
 # ////// COMPLETE EQUATION //////
@@ -121,11 +102,14 @@ function imex(ks::KSEq{n, ISODD, LIN, NLIN, G}) where {n, ISODD, LIN, NLIN, G<:U
 end
 
 # evaluate right hand side of equation
-@inline (ks::KSEq{n, ISODD, LIN, NLIN, G})(t::Real, uk::FT, dukdt::FT) where {n, ISODD, LIN, NLIN, G, FT<:AbstractFTField{n}} =
+(ks::KSEq{n, ISODD, LIN, NLIN, G})(t::Real, uk::FT, dukdt::FT) where {n, ISODD, LIN, NLIN, G, FT<:AbstractFTField{n}} =
     (A_mul_B!(dukdt, ks.lks, uk);                      # linear term
      ks.nlks(t, uk, dukdt, true);                      # nonlinear term (add value)
      G <: AbstractForcing && ks.forcing(t, uk, dukdt); # add forcing
      return dukdt) 
+
+(ks::KSEq)(t::Real, uk::FT, dukdt::FT) where {FT<:VecFTField} =
+    (ks(t, field(uk), field(dukdt)); dukdt)
 
 
 # # ////// LINEARISED EQUATION //////

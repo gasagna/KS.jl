@@ -6,9 +6,8 @@ export AbstractFTField,
        AbstractField,
        FTField,
        Field,
-       WaveNumbers,
-       fieldsize,
-       mesh
+       mesh,
+       ddx!
 
 # ////// ABSTRACT FIELD TYPES //////
 abstract type AbstractFTField{n, T} <: AbstractVector{T} end
@@ -37,7 +36,8 @@ end
 
 
 # ////// outer constructors //////
-FTField(n::Int, L::Real) = FTField{n}(zeros(Complex{Float64}, n), L)
+FTField(n::Int, L::Real) = FTField(zeros(Complex{Float64}, n), L)
+FTField(data::Vector{<:Complex}, L::Real) = FTField{length(data)}(data, L)
 
 # ////// array interface //////
 @inline Base.getindex(uk::FTField, i::Integer) =
@@ -63,10 +63,11 @@ dotdiff(uk::FTField{n}, vk::FTField{n}) where {n} =
 
 
 # ////// shifts and differentiation //////
-Base.shift!(uk::FTField{n}, s::Real) where {n} =
+Base.shift!(uk::AbstractFTField{n}, s::Real) where {n} =
     (uk .*= exp.(im.*2π.*s./uk.L.*(1:n)); uk)
 
-ddx!(uk::FTField{n}) where {n} = (uk .*= im.*2π./uk.L.*(1:n); uk)
+ddx!(uk::FT) where {n, FT<:AbstractFTField{n}} = 
+    (uk .*= im.*2π./uk.L.*(1:n); uk)
 
 
 # ////// SOLUTION IN PHYSICAL SPACE //////

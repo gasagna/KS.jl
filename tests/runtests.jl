@@ -1,6 +1,7 @@
 using Base.Test
 using KS
 using DualNumbers
+using IMEXRKCB
 
 @testset "spaces                                 " begin
     @testset "FTField                                " begin
@@ -160,6 +161,13 @@ end
         U .= 1
         @test U[1] == 1
         @test U[n] == 1
+
+        # check symmetry
+        state(U) .= 1 + 3im
+        prime(U) .= 2 + 6im
+        KS._set_symmetry!(Val(true), U)
+        @test all(state(U) .== 0 + 3*im)
+        @test all(prime(U) .== 0 + 6*im)
     end
 end
 
@@ -209,23 +217,19 @@ end
 end
 
 
-# @testset "derivative                             " begin
-#     # cos(2π/4*x) - sin(2*2π/4*x)
-#     uk = FTField(Complex{Float64}[0.0+im*0.0, 0.5+im*0.0, 0.0+im*0.5], 4)
-#     qk = WaveNumbers(2, 4)
-    
-#     # derivative, in place
-#     uk .= uk.*im.*qk
+@testset "ddx                                    " begin
+    # d/dx[cos(x) - sin(2*x)] = -sin(x) - 2*cos(2x)
+    uk = FTField(3, 2π)
+    uk[1] = 0.5
+    uk[2] = 0.5*im
+    uk[3] = 0.0
+   
+    ddx!(uk)
+	@test uk[1] ==  0.5*im
+    @test uk[2] == -1
+    @test uk[3] == 0
+end
 
-#     @test uk[0] ==   0.0
-#     @test uk[1] == ( 0.0 + im*0.5)*2π/4
-#     @test uk[2] == (-0.5 + im*0.0)*2π/4*2
-
-#     # also test the in place version
-#     vk = FTField(Complex{Float64}[0.0+im*0.0, 0.5+im*0.0, 0.0+im*0.5], 4)
-#     ddx!(vk)
-#     @test all(vk.data .== uk.data) == true # fixme
-# end
 
 @testset "system                                 " begin
     F = KSEq(2, 4, 0, false)
@@ -241,6 +245,127 @@ end
     N(0.0, uk, out3)
     @test out1[1] == out2[1] + out3[1]
     @test out1[2] == out2[2] + out3[2]
+end
+
+
+@testset "vector                                 " begin
+	@testset "vector - no symmetry                   " begin
+	    uk = FTField(3, 2π)
+	    uk[1] = 1 + 2*im
+	    uk[2] = 3 + 4*im
+	    uk[3] = 5 + 6*im
+
+	    x = VecFTField(uk, false)
+	    @test length(x) == 6
+	    for i = 1:6
+	    	@test x[i] == i
+	    end
+	    	  x[1] =  99
+	    @test x[1] == 99
+		      x[6] =  99
+	    @test x[6] == 99
+	    @test_throws BoundsError x[0]
+	    @test_throws BoundsError x[7]
+
+	    @test all(field(x) == uk)
+	end
+	@testset "vector - odd symmetry                  " begin
+	    uk = FTField(3, 2π)
+	    uk[1] = 1 + 2*im
+	    uk[2] = 3 + 4*im
+	    uk[3] = 5 + 6*im
+
+	    x = VecFTField(uk, true)
+	    @test length(x) == 3
+	    for i = 1:3
+	    	@test x[i] == 2*i
+	    end
+	    	  x[1] =  99
+	    @test x[1] == 99
+		      x[3] =  99
+	    @test x[3] == 99
+	    @test_throws BoundsError x[0]
+	    @test_throws BoundsError x[4]
+	end
+end
+
+@testset "tangent code                           " begin
+
+	@testset "compare with nonlinear simulations " begin	
+	    # setup
+	    n, U, L, dt = 31, 0, 50, 1
+
+	    # nonlinear system
+	    F = KSEq(n, L, U, false, :forward)
+		scheme = IMEXMethod(:CB4_4R3R, FTField(n, L))
+		_a, _b = imex(F)
+		ϕ = integrator(_b, _a, scheme, dt)
+
+	    # augmented system
+	    F = KSEq(n, L, U, false, :tangent)
+		scheme = IMEXMethod(:CB4_4R3R, VarFTField(n, L))
+		_a, _b = imex(F)
+		ϕψ = integrator(_b, _a, scheme, dt)
+
+		# random initial condition
+		srand(0)
+		# uk = FTField(n, L); uk[1:n>>1] .= 1e-2*rand(n>>1);
+		uk = FTField(n, L); uk .= 1e-2
+
+		# propagate to attractor
+		ϕ(uk, (0, 1000))
+
+		# relative perturbation of the real parts by ϵ when integrating by T
+		ϵ = 1e-6
+		T = 1
+
+		for k = 1:n
+			# do two nonlinear simulations
+			uk_tmp = copy(uk)
+			ϕ(uk_tmp, (0, T))
+			a = real(uk_tmp[k])
+
+			uk_tmp = copy(uk); uk_tmp[k] += ϵ*abs(real(uk[k]))
+			ϕ(uk_tmp, (0, T))
+			b = real(uk_tmp[k])
+
+			# do one linearised simulation
+			uk_tmp = FTField(n, L); uk_tmp[k] += 1
+			ϕψ(VarFTField(copy(uk), uk_tmp), (0, T))
+			c = real(uk_tmp[k])
+
+			val = abs((b-a)/(ϵ*abs(real(uk[k]))) - c)/abs(c)
+			# @printf "%0.4d - %.3e\n" k val
+		end
+	end
+
+	@testset "compare with analytical solution" begin
+	    # setup
+	    n, U, L, dt = 21, 0, 50, 0.1
+
+	    # augmented system
+	    F = KSEq(n, L, U, false, :tangent)
+		scheme = IMEXMethod(:CB4_4R3R, VarFTField(n, L))
+		_a, _b = imex(F)
+		ϕψ = integrator(_b, _a, scheme, dt)
+
+		# zero initial condition
+		uk = FTField(n, L)
+
+		# integration horizon
+		T = 1
+
+		# perturb real part
+		for k = 1:n
+			vk = FTField(n, L); vk[k] = 1
+			ϕψ(VarFTField(copy(uk), vk), (0, T))
+			actual = real(vk[k])
+			qk = 2π*k/L
+			exact = exp((qk^2 - qk^4)*T)
+
+			@test abs(actual - exact) < 4e-7
+		end
+	end
 end
 
 

@@ -17,14 +17,17 @@ for (FT, numtype) in [(:FTField, Complex), (:Field, Real)]
         struct $typename{n, T<:Dual{<:$numtype}, F<:$FT{n, <:$numtype}} <: $abstractname{n, T}
             uk::F # state
             vk::F # perturbation
+            L::Float64
         end
 
         # ////// constructors //////
         $typename(n::Int, L::Real) = 
             $typename($FT(n, L), $FT(n, L))
 
-        $typename(uk::$FT{n, T}, vk::$FT{n, T}) where {n, T} = 
-            $typename{n, Dual{T}, typeof(uk)}(uk, vk)
+        function $typename(uk::$FT{n, T}, vk::$FT{n, T}) where {n, T}
+        	uk.L != vk.L && throw(ArgumentError("fields must have same domain length"))
+            $typename{n, Dual{T}, typeof(uk)}(uk, vk, uk.L)
+        end
 
         # ////// accessors //////
         state(ukvk::$typename) = ukvk.uk
