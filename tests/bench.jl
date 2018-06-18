@@ -11,12 +11,12 @@ for n = 10:100
     # benchmark forward code
     U, V = FTField(n, L, false), FTField(n, L, false)
     F(0.0, U, V) 
-    tF = minimum([@elapsed F(0.0, U, V) for i = 1:100])
+    tF = minimum([@elapsed F(0.0, U, V) for i = 1:5000])
 
     # benchmark forward+tangent code
     U, V = VarFTField(n, L, false), VarFTField(n, L, false)
     FL(0.0, U, V) 
-    tFL = minimum([@elapsed FL(0.0, U, V) for i = 1:1000])
+    tFL = minimum([@elapsed FL(0.0, U, V) for i = 1:5000])
 
     @printf "%03d - %7.4f      - %9.4f      - %5.3f\n" n tF*10^6 tFL*10^6 tFL/tF
 end
