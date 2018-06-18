@@ -150,3 +150,25 @@ end
         @test uk[4] == 17
     end
 end
+
+@testset "symmetry                               " begin
+    @testset "full space                         " begin
+        uk = FTField([1, 2, 3, 4], 1, false)
+
+        KS._set_symmetry!(uk)
+        @test uk[WaveNumber(1)] == 1+2*im
+        @test uk[WaveNumber(2)] == 3+4*im
+    end
+
+    @testset "odd space                         " begin
+        uk  = FTField(2, 1, true)
+
+        # break the invariance
+        uk[WaveNumber(1)] = 1+2*im
+        uk[WaveNumber(2)] = 3+4*im
+
+        KS._set_symmetry!(uk)
+        @test uk[WaveNumber(1)] == 0+2*im
+        @test uk[WaveNumber(2)] == 0+4*im
+    end
+end

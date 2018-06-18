@@ -92,6 +92,16 @@ function FTField(input::Vector{<:Real}, L::Real, isodd::Bool)
 end
 
 
+# ////// Enforce symmetries, if needed //////
+_set_symmetry!(U::AbstractFTField{n,  true}) where {n} = 
+    (@inbounds @simd for k in wavenumbers(1:n)
+        U[k] = im.*imag(U[k])
+     end; U)
+    
+_set_symmetry!(U::AbstractFTField{n, false}) where {n} =  U
+
+
+
 # ////// array interface //////
 # custom check bounds
 Base.checkbounds(U::AbstractFTField{n}, k::WaveNumber) where {n} =

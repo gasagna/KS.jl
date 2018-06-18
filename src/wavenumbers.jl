@@ -24,7 +24,7 @@ Base.convert(::Type{S},          k::WaveNumber)  where {S <: Number} = S(Int64(k
 Base.promote_rule(::Type{WaveNumber}, ::Type{S}) where {S <: Number} = promote_type(S, Int64)
 
 # arithmetic
-for op in [:+, :-, :*, :/, :<]
+for op in [:+, :-, :*, :/, :<, :<=]
     @eval begin
         Base.$(op)(a::WaveNumber, b::WaveNumber) = $(op)(Int64(a), Int64(b))
     end
