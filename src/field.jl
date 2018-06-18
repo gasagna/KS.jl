@@ -7,7 +7,8 @@ export AbstractField,
        mesh
 
 # ////// SOLUTION IN PHYSICAL SPACE //////
-abstract type AbstractField{n,   ISODD, T} <: AbstractVector{T} end
+abstract type AbstractField{n, T} <: AbstractVector{T} end
+
 # TODO: make this from zero to ...
 Base.size(U::AbstractField{n}) where {n} = (2*(n+1),)
 Base.IndexStyle(::Type{<:AbstractField}) = Base.IndexLinear()
