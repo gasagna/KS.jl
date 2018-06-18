@@ -68,7 +68,7 @@ struct FTField{n,
     end
 end
 
-# helper function to construct the dofs array
+# helper function to construct the array of degrees of freedom
 function _weave(x::AbstractVector, ::Val{true})
     out = zeros(eltype(x), 2*length(x))
     out[2:2:end] .= x
@@ -101,7 +101,7 @@ Base.checkbounds(U::AbstractFTField{n}, i::Int) where {n} =
     (0 < i ≤ length(U) || throw(BoundsError(U.dofs, i)); nothing)
 
 
-# indexing over the degree of freedom
+# indexing over the degrees of freedom
 @inline Base.getindex(U::FTField{n, false}, i::Int) where {n} =
     (@boundscheck checkbounds(U, i); getindex(U.dofs, i+2))
 
