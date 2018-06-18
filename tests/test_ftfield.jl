@@ -26,12 +26,12 @@ using KS
         @test length(uk) == 4
         @test size(uk) == (4, )
 
-        uk[wavenumber(1)]        = 1.0+2.0*im
-        uk[wavenumber(2)]        = 3.0+4.0*im
-        @test uk[wavenumber(1)] == 1.0+2.0*im
-        @test uk[wavenumber(2)] == 3.0+4.0*im
-        @test_throws BoundsError uk[wavenumber(0)]
-        @test_throws BoundsError uk[wavenumber(3)]
+        uk[WaveNumber(1)]        = 1.0+2.0*im
+        uk[WaveNumber(2)]        = 3.0+4.0*im
+        @test uk[WaveNumber(1)] == 1.0+2.0*im
+        @test uk[WaveNumber(2)] == 3.0+4.0*im
+        @test_throws BoundsError uk[WaveNumber(0)]
+        @test_throws BoundsError uk[WaveNumber(3)]
     end
     @testset "odd space                           " begin
         for uk in [FTField([1.0, 2.0, 3.0, 4.0], 1, true),
@@ -58,10 +58,10 @@ using KS
         @test size(uk) == (4, )
 
         # note we can break the odd invariance!
-        uk[wavenumber(1)]        = 1.0+2.0*im
-        @test uk[wavenumber(1)] == 1.0+2.0*im
-        @test_throws BoundsError uk[wavenumber(0)]
-        @test_throws BoundsError uk[wavenumber(5)]
+        uk[WaveNumber(1)]        = 1.0+2.0*im
+        @test uk[WaveNumber(1)] == 1.0+2.0*im
+        @test_throws BoundsError uk[WaveNumber(0)]
+        @test_throws BoundsError uk[WaveNumber(5)]
     end
 end
 
@@ -71,16 +71,16 @@ end
         vk = similar(uk)
         @test length(vk) == 4
         @test size(vk) == (4, )
-        @test vk[wavenumber(1)] == 0.0 + 0.0*im
-        @test vk[wavenumber(2)] == 0.0 + 0.0*im
-        @test vk[wavenumber(3)] == 0.0 + 0.0*im
-        @test vk[wavenumber(4)] == 0.0 + 0.0*im
+        @test vk[WaveNumber(1)] == 0.0 + 0.0*im
+        @test vk[WaveNumber(2)] == 0.0 + 0.0*im
+        @test vk[WaveNumber(3)] == 0.0 + 0.0*im
+        @test vk[WaveNumber(4)] == 0.0 + 0.0*im
 
         vk = copy(FTField([1, 2], 1, true))
         @test length(vk) == 2
         @test size(vk) == (2, )
-        @test vk[wavenumber(1)] == 0.0+1.0*im
-        @test vk[wavenumber(2)] == 0.0+2.0*im
+        @test vk[WaveNumber(1)] == 0.0+1.0*im
+        @test vk[WaveNumber(2)] == 0.0+2.0*im
         @test vk[1] == 1.0
         @test vk[2] == 2.0
     end
@@ -89,14 +89,14 @@ end
         vk = similar(uk)
         @test length(vk) == 4
         @test size(vk) == (4, )
-        @test vk[wavenumber(1)] == 0.0 + 0.0*im
-        @test vk[wavenumber(2)] == 0.0 + 0.0*im
+        @test vk[WaveNumber(1)] == 0.0 + 0.0*im
+        @test vk[WaveNumber(2)] == 0.0 + 0.0*im
 
         vk = copy(FTField([1.0+2.0*im, 3.0+4.0*im], 1, false))
         @test length(vk) == 4
         @test size(vk) == (4, )
-        @test vk[wavenumber(1)] == 1.0+2.0*im
-        @test vk[wavenumber(2)] == 3.0+4.0*im
+        @test vk[WaveNumber(1)] == 1.0+2.0*im
+        @test vk[WaveNumber(2)] == 3.0+4.0*im
         @test vk[1] == 1.0
         @test vk[2] == 2.0
         @test vk[3] == 3.0
@@ -106,18 +106,18 @@ end
 
 @testset "dot and norm                           " begin
     # cos(x)*cos(x)
-    uk = FTField(2, 1, false); uk[wavenumber(1)] = 0.5
+    uk = FTField(2, 1, false); uk[WaveNumber(1)] = 0.5
     @test dot(uk, uk) == 0.5
     @test norm(uk) == sqrt(0.5)
 
     # cos(x)*sin(x)
-    uk = FTField(2, 1, false); uk[wavenumber(1)] =  0.5
-    vk = FTField(2, 1, false); vk[wavenumber(1)] = -0.5*im
+    uk = FTField(2, 1, false); uk[WaveNumber(1)] =  0.5
+    vk = FTField(2, 1, false); vk[WaveNumber(1)] = -0.5*im
     @test dot(uk, vk) == 0.0
 
     # sin(2x)*sin(2x)
-    uk = FTField(2, 1, true); uk[wavenumber(1)] = -0.5*im
-    vk = FTField(2, 1, true); vk[wavenumber(1)] = -0.5*im
+    uk = FTField(2, 1, true); uk[WaveNumber(1)] = -0.5*im
+    vk = FTField(2, 1, true); vk[WaveNumber(1)] = -0.5*im
     @test dot(uk, uk) == 0.5
     @test norm(uk) == sqrt(0.5)
 end

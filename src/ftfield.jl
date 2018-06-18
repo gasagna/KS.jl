@@ -92,44 +92,35 @@ function FTField(input::Vector{<:Real}, L::Real, isodd::Bool)
 end
 
 
-# trick to index over the wave numbers
-struct WaveNumber{T<:Integer}
-    value::T
-end
-
-@inline wavenumber(k::T) where {T<:Integer} = WaveNumber{T}(k)
-@inline value(k::WaveNumber) = k.value
-
-
 # ////// array interface //////
 # custom check bounds
 Base.checkbounds(U::AbstractFTField{n}, k::WaveNumber) where {n} =
-    (0 < value(k) ≤ n || throw(BoundsError(U, value(k))); nothing)
+    (0 < k ≤ n || throw(BoundsError(U, k)); nothing)
 
-Base.checkbounds(U::AbstractFTField{n}, i::Integer) where {n} =
+Base.checkbounds(U::AbstractFTField{n}, i::Int) where {n} =
     (0 < i ≤ length(U) || throw(BoundsError(U.dofs, i)); nothing)
 
 
 # indexing over the degree of freedom
-@inline Base.getindex(U::FTField{n, false}, i::Integer) where {n} =
+@inline Base.getindex(U::FTField{n, false}, i::Int) where {n} =
     (@boundscheck checkbounds(U, i); getindex(U.dofs, i+2))
 
-@inline Base.setindex!(U::FTField{n, false}, val, i::Integer) where {n} =
+@inline Base.setindex!(U::FTField{n, false}, val, i::Int) where {n} =
     (@boundscheck checkbounds(U, i); setindex!(U.dofs, val, i+2))
 
-@inline Base.getindex(U::FTField{n, true}, i::Integer) where {n} =
+@inline Base.getindex(U::FTField{n, true}, i::Int) where {n} =
     (@boundscheck checkbounds(U, i); getindex(U.dofs, 2i+2))
 
-@inline Base.setindex!(U::FTField{n, true}, val, i::Integer) where {n} =
+@inline Base.setindex!(U::FTField{n, true}, val, i::Int) where {n} =
     (@boundscheck checkbounds(U, i); setindex!(U.dofs, val, 2i+2))
 
 # indexing over the wave numbers
 @inline Base.getindex(U::FTField, k::WaveNumber) =
-    (@boundscheck checkbounds(U, k); getindex(U.data, value(k)+1))
+    (@boundscheck checkbounds(U, k); getindex(U.data, k+1))
 
 # no guarantee we do not break the invariance!!
 @inline Base.setindex!(U::FTField, val, k::WaveNumber) =
-    (@boundscheck checkbounds(U, k); setindex!(U.data, val, value(k)+1))
+    (@boundscheck checkbounds(U, k); setindex!(U.data, val, k+1))
 
 
 Base.similar(U::FTField{n, ISODD}) where {n, ISODD} = FTField(n, U.L, ISODD)
@@ -138,22 +129,22 @@ Base.copy(U::FTField) = (V = similar(U); V .= U; V)
 
 # ////// inner product and norm //////
 Base.dot(U::FTField{n}, V::FTField{n}) where {n} =
-    2*real(sum(U[wavenumber(k)]*conj(V[wavenumber(k)]) for k = 1:n))
+    2*real(sum(U[k]*conj(V[k]) for k in wavenumbers(1:n)))
 
 Base.norm(U::FTField) = sqrt(dot(U, U))
 
 # ////// squared norm of the difference //////
 dotdiff(U::FTField{n}, V::FTField{n}) where {n} =
-    2*real(sum(abs2(U[wavenumber(k)] - V[wavenumber(k)]) for k = 1:n))
+    2*real(sum(abs2(U[k] - V[k]) for k in wavenumbers(1:n)))
 
 
 # ////// shifts and differentiation //////
 Base.shift!(U::AbstractFTField{n}, s::Real) where {n} =
-    (@inbounds @simd for k = 1:n
-         U[wavenumber(k)] = exp(im*2π*s/U.L*k)
+    (@inbounds @simd for k in wavenumbers(1:n)
+         U[k] = exp(im*2π*s/U.L*k)
      end; U)
 
 ddx!(U::AbstractFTField{n}) where {n} =
-    (@inbounds @simd for k = 1:n
-         U[wavenumber(k)] = im * 2π/U.L * k
+    (@inbounds @simd for k in wavenumbers(1:n)
+         U[k] = im * 2π/U.L * k
      end; U)
