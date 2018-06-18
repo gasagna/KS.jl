@@ -78,10 +78,6 @@ NonLinearKSEqTerm(n::Int, L::Real, c::Real, ISODD::Bool, mode::Symbol=:forward) 
     dUdt
 end
 
-# enforce symmetries, if needed
-_set_symmetry!(::Val{true},  U::AbstractFTField) = (U .= im.*imag.(U); U)
-_set_symmetry!(::Val{false}, U::AbstractFTField) = U
-
 
 # ////// COMPLETE EQUATION //////
 struct KSEq{n, ISODD, LIN<:LinearKSEqTerm{n}, NLIN<:NonLinearKSEqTerm{n, ISODD}, G<:Union{AbstractForcing{n}, Void}}
