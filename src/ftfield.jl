@@ -93,11 +93,11 @@ end
 
 
 # ////// Enforce symmetries, if needed //////
-_set_symmetry!(U::AbstractFTField{n,  true}) where {n} = 
+_set_symmetry!(U::AbstractFTField{n,  true}) where {n} =
     (@inbounds @simd for k in wavenumbers(1:n)
         U[k] = im.*imag(U[k])
      end; U)
-    
+
 _set_symmetry!(U::AbstractFTField{n, false}) where {n} =  U
 
 
@@ -151,10 +151,10 @@ dotdiff(U::FTField{n}, V::FTField{n}) where {n} =
 # ////// shifts and differentiation //////
 Base.shift!(U::AbstractFTField{n}, s::Real) where {n} =
     (@inbounds @simd for k in wavenumbers(1:n)
-         U[k] = exp(im*2π*s/U.L*k)
+         U[k] *= exp(im*2π*s/U.L*k)
      end; U)
 
 ddx!(U::AbstractFTField{n}) where {n} =
     (@inbounds @simd for k in wavenumbers(1:n)
-         U[k] = im * 2π/U.L * k
+         U[k] *= im*2π/U.L*k
      end; U)

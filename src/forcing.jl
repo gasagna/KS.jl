@@ -10,45 +10,45 @@ abstract type AbstractForcing{n} end
 
 # ////// STEADY FORCING //////
 struct SteadyForcing{n, FT<:AbstractFTField{n}} <: AbstractForcing{n}
-    hk::FT
+    H::FT
 end
-SteadyForcing(hk::AbstractFTField{n}) where {n} = SteadyForcing{n, typeof(hk)}(hk)
+SteadyForcing(H::AbstractFTField{n}) where {n} = SteadyForcing{n, typeof(H)}(H)
 
 # allow indexing this object
-Base.getindex(sf::SteadyForcing, i::Int) = sf.hk[i]
-Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.hk[i] = val)
+Base.getindex(sf::SteadyForcing, i::Int) = sf.H[i]
+Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.H[i] = val)
 
-# add to dukdt by default
-@inline (sf::SteadyForcing{n, FT})(t::Real, uk::FT, dukdt::FT) where {n, FT<:AbstractFTField{n}} =
-    (dukdt .+= sf.hk; return dukdt)
+# add to dUdt by default
+@inline (sf::SteadyForcing{n, FT})(t::Real, U::FT, dUdt::FT) where {n, FT<:AbstractFTField{n}} =
+    (dUdt .+= sf.H; return dUdt)
 
 
 
 # ////// FORCING FOR THE SENSITIVITY EQUATIONS //////
 struct SensitivityForcing{n, FT<:AbstractFTField{n}} <: AbstractForcing{n}
-	tmp::FT
-	χ::Float64
+    tmp::FT
+    χ::Float64
 end
 
 # constructors
-SensitivityForcing(n::Int, L::Real, χ::Real) = 
-	SensitivityForcing(FTField(n, L), χ)
+SensitivityForcing(n::Int, L::Real, χ::Real) =
+    SensitivityForcing(FTField(n, L), χ)
 
-SensitivityForcing(uk::FTField{n}, χ::Real) where {n} = 
-	SensitivityForcing{n, typeof(uk)}(uk, χ)
+SensitivityForcing(U::FTField{n}, χ::Real) where {n} =
+    SensitivityForcing{n, typeof(U)}(U, χ)
 
 # obey callable interface
-@inline function (sf::SensitivityForcing{n})(t::Real, uvk::FT, duvkdt::FT) where {n, FT<:VarFTField{n}}
-	# aliases
-	duvkdt_state, duvkdt_prime = state(duvkdt), prime(duvkdt)
+@inline function (sf::SensitivityForcing{n})(t::Real, UV::FT, dUVdt::FT) where {n, FT<:VarFTField{n}}
+    # aliases
+    dUVdt_state, dUVdt_prime = state(dUVdt), prime(dUVdt)
 
-	# this is fₚ(u(x,t))
-	sf.tmp .= state(uvk)
-	ddx!(sf.tmp)
-	duvkdt_prime .-= sf.tmp
+    # this is fₚ(u(x,t))
+    sf.tmp .= state(UV)
+    ddx!(sf.tmp)
+    dUVdt_prime .-= sf.tmp
 
-	# this is χ⋅f(u(x,t))
-	sf.χ != 0 && (duvkdt_prime .+= sf.χ * state(duvkdt))
+    # this is χ⋅f(u(x,t))
+    sf.χ != 0 && (dUVdt_prime .+= sf.χ * state(dUVdt))
 
-	return duvkdt
+    return dUVdt
 end

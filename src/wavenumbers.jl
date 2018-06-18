@@ -2,10 +2,10 @@
 # Copyright 2017-18, Davide Lasagna, AFM, University of Southampton #
 # ----------------------------------------------------------------- #
 
-export WaveNumber, 
+export WaveNumber,
        wavenumbers
 
-# trick to index FTFields over the wave numbers rather 
+# trick to index FTFields over the wave numbers rather
 # than over the degrees of freedom
 primitive type WaveNumber <: Signed 64 end
 
@@ -31,5 +31,5 @@ for op in [:+, :-, :*, :/, :<, :<=]
 end
 
 # obtain a vector of wave numbers for iteration
-wavenumbers(rng::Range) = 
+wavenumbers(rng::Range) =
     range(WaveNumber.((first(rng), step(rng), last(rng)))...)

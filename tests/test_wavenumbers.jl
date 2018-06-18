@@ -1,7 +1,3 @@
-using Base.Test
-using KS
-
-
 @testset "arithmetic                             " begin
     a = WaveNumber(1)
     @test (a+1) == 2

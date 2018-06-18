@@ -1,12 +1,9 @@
-using Base.Test
-using KS
-
 @testset "Field                                  " begin
     # indexing
     u = Field(2, 1)
-	@test eltype(u) == Float64
-	@test length(u) == 6
-	@test size(u) == (6, )
+    @test eltype(u) == Float64
+    @test length(u) == 6
+    @test size(u) == (6, )
 
     @test_throws BoundsError u[0]
           u[1] =  2
@@ -26,7 +23,7 @@ using KS
     u .*= u
     @test u[1] == u[2] == u[3] == u[4] == u[5] == u[6] == 4
 
-    u .= [1, 1, 1, 1, 1, 1] 
+    u .= [1, 1, 1, 1, 1, 1]
     @test u[1] == u[2] == u[3] == u[4] == u[5] == u[6] == 1
 
     # mesh
