@@ -154,7 +154,11 @@ Base.shift!(U::AbstractFTField{n}, s::Real) where {n} =
          U[k] *= exp(im*2π*s/U.L*k)
      end; U)
 
-ddx!(U::AbstractFTField{n}) where {n} =
-    (@inbounds @simd for k in wavenumbers(1:n)
-         U[k] *= im*2π/U.L*k
-     end; U)
+# modify first argument
+ddx!(iKU::AbstractFTField{n}, U::AbstractFTField{n}) where {n} =
+	(@inbounds @simd for k in wavenumbers(n)
+         iKU[k] = im*2π/U.L*k*U[k]
+     end; iKU)
+
+# in-place function
+ddx!(U::AbstractFTField) = ddx!(U, U)
