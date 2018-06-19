@@ -51,7 +51,7 @@ SensitivityForcing(U::FTField{n}, χ::Real) where {n} =
     dUVdt_prime .-= sf.tmp
 
     # this is χ⋅f(u(x,t))
-    sf.χ != 0 && (dUVdt_prime .+= sf.χ * state(dUVdt))
+    sf.χ != 0 && (dUVdt_prime .+= sf.χ .* state(dUVdt))
 
     return dUVdt
 end
