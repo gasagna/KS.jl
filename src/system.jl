@@ -5,7 +5,7 @@
 import Flows
 
 export KSEq,
-       imex
+       splitexim,
 
 # ////// LINEAR TERM //////
 struct LinearKSEqTerm{n, ISODD, FT<:AbstractFTField{n}}
@@ -99,13 +99,13 @@ KSEq(n::Int,
      forcing::Union{AbstractForcing, Void}=nothing) = KSEq{n, ISODD}(L, c, mode, forcing)
 
 # split into implicit and explicit terms
-function imex(ks::KSEq{n, ISODD, LIN, NLIN, G}) where {n, ISODD, LIN, NLIN, G<:Union{AbstractForcing{n}, Void}}
+function splitexim(ks::KSEq{n, ISODD, LIN, NLIN, G}) where {n, ISODD, LIN, NLIN, G<:Union{AbstractForcing{n}, Void}}
     @inline function wrapper(t::Real, U::AbstractFTField{n}, dUdt::AbstractFTField{n})
         ks.nlks(t, U, dUdt, false)                     # eval nonlinear term
         G <: AbstractForcing && ks.forcing(t, U, dUdt) # only eval if there is a forcing
         return dUdt
     end
-    return ks.lks, wrapper
+    return wrapper, ks.lks
 end
 
 # evaluate right hand side of equation
