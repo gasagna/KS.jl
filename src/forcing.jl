@@ -26,19 +26,22 @@ Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.H[i] = val)
 
 # ////// FORCING FOR THE SENSITIVITY EQUATIONS //////
 struct SensitivityForcing{n, FT<:AbstractFTField{n}} <: AbstractForcing{n}
-    tmp::FT
+    tmp::FT    # temporary: set to full space 
     χ::Float64
 end
 
 # constructors
 SensitivityForcing(n::Int, L::Real, χ::Real) =
-    SensitivityForcing(FTField(n, L), χ)
+    SensitivityForcing(FTField(n, L, false), χ)
 
 SensitivityForcing(U::FTField{n}, χ::Real) where {n} =
     SensitivityForcing{n, typeof(U)}(U, χ)
 
 # obey callable interface
-@inline function (sf::SensitivityForcing{n})(t::Real, UV::FT, dUVdt::FT) where {n, FT<:VarFTField{n}}
+@inline function (sf::SensitivityForcing{n})(t::Real, 
+                                             UV::FT, 
+                                             dUVdt::FT) where {n, 
+                                                ISODD, FT<:VarFTField{n, ISODD}}
     # aliases
     dUVdt_state, dUVdt_prime = state(dUVdt), prime(dUVdt)
 
