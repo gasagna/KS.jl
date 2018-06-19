@@ -25,17 +25,18 @@ Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.H[i] = val)
 
 
 # ////// FORCING FOR THE SENSITIVITY EQUATIONS //////
-struct SensitivityForcing{n, FT<:AbstractFTField{n}} <: AbstractForcing{n}
+struct SensitivityForcing{n, FT<:AbstractFTField{n}, F} <: AbstractForcing{n}
     tmp::FT    # temporary: set to full space 
     χ::Float64
+    f::F       
 end
 
 # constructors
-SensitivityForcing(n::Int, L::Real, χ::Real) =
-    SensitivityForcing(FTField(n, L, false), χ)
+SensitivityForcing(n::Int, L::Real, χ::Real, f) =
+    SensitivityForcing(FTField(n, L, false), χ, f)
 
-SensitivityForcing(U::FTField{n}, χ::Real) where {n} =
-    SensitivityForcing{n, typeof(U)}(U, χ)
+SensitivityForcing(U::FTField{n}, χ::Real, f) where {n} =
+    SensitivityForcing{n, typeof(U), typeof(f)}(U, χ, f)
 
 # obey callable interface
 @inline function (sf::SensitivityForcing{n})(t::Real, 
@@ -51,7 +52,10 @@ SensitivityForcing(U::FTField{n}, χ::Real) where {n} =
     dUVdt_prime .-= sf.tmp
 
     # this is χ⋅f(u(x,t))
-    sf.χ != 0 && (dUVdt_prime .+= sf.χ .* state(dUVdt))
+    if sf.χ != 0
+        sf.f(t, state(UV), sf.tmp)
+        dUVdt_prime .+= sf.χ .* sf.tmp
+    end
 
     return dUVdt
 end
