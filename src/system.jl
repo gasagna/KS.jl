@@ -46,33 +46,26 @@ struct NonLinearKSEqTerm{n, ISODD, FT<:AbstractFTField{n}, F<:AbstractField{n}}
      u::F       # solution in physical space
     ifft        # plans
     fft         #
-    function NonLinearKSEqTerm{n, ISODD}(L::Real, c::Real, mode::Symbol) where {n, ISODD}
-        if mode == :forward
-            V = FTField(n, L, ISODD); u = Field(n, L)
-        elseif mode == :tangent
-            V = VarFTField(n, L, ISODD); u = VarField(n, L)
-        else
-            throw(ArgumentError("mode :$mode not understood." *
-                                " Must be :forward or :tangent"))
-        end
+    function NonLinearKSEqTerm{n, ISODD}(L::Real, c::Real) where {n, ISODD}
+        V = FTField(n, L, ISODD); u = Field(n, L)
         fft, ifft = ForwardFFT(u), InverseFFT(V)
         new{n, ISODD, typeof(V), typeof(u)}(c, V, u, ifft, fft)
     end
 end
 
-NonLinearKSEqTerm(n::Int, L::Real, c::Real, ISODD::Bool, mode::Symbol=:forward) =
-    NonLinearKSEqTerm{n, ISODD}(L, c, mode)
+NonLinearKSEqTerm(n::Int, L::Real, c::Real, ISODD::Bool) =
+    NonLinearKSEqTerm{n, ISODD}(L, c)
 
 @inline function (nlks::NonLinearKSEqTerm{n, ISODD, FT})(t::Real,
                                                          U::FT,
                                                          dUdt::FT,
                                                          add::Bool=false) where {n, ISODD, FT<:AbstractFTField{n}}
-    _set_symmetry!(U)         # enforce symmetries
+    _set_symmetry!(U)                     # enforce symmetries
     nlks.ifft(U, nlks.u)                  # copy and inverse transform
-    nlks.u .= .- 0.5.*(nlks.c.+nlks.u).^2  # sum c, square and divide by 2
+    nlks.u .= .- 0.5.*(nlks.c.+nlks.u).^2 # sum c, square and divide by 2
     nlks.fft(nlks.u, nlks.V)              # forward transform
     ddx!(nlks.V)                          # differentiate
-    _set_symmetry!(nlks.V)    # enforce symmetries
+    _set_symmetry!(nlks.V)                # enforce symmetries
 
     add == true ? (dUdt .+= nlks.V) : (dUdt .= nlks.V)
     dUdt
@@ -84,8 +77,8 @@ struct KSEq{n, ISODD, LIN<:LinearKSEqTerm{n}, NLIN<:NonLinearKSEqTerm{n, ISODD},
         lks::LIN
        nlks::NLIN
     forcing::G
-    function KSEq{n, ISODD}(L::Real, c::Real, mode::Symbol, forcing::G) where {n, ISODD, G}
-        nlks = NonLinearKSEqTerm(n, L, c, ISODD, mode)
+    function KSEq{n, ISODD}(L::Real, c::Real, forcing::G) where {n, ISODD, G}
+        nlks = NonLinearKSEqTerm(n, L, c, ISODD)
         lks  = LinearKSEqTerm(n, L, ISODD)
         new{n, ISODD, typeof(lks), typeof(nlks), typeof(forcing)}(lks, nlks, forcing)
     end
@@ -95,8 +88,7 @@ KSEq(n::Int,
      L::Real,
      c::Real,
      ISODD::Bool,
-     mode::Symbol=:forward,
-     forcing::Union{AbstractForcing, Void}=nothing) = KSEq{n, ISODD}(L, c, mode, forcing)
+     forcing::Union{AbstractForcing, Void}=nothing) = KSEq{n, ISODD}(L, c, forcing)
 
 # split into implicit and explicit terms
 function splitexim(ks::KSEq{n, ISODD, LIN, NLIN, G}) where {n, ISODD, LIN, NLIN, G<:Union{AbstractForcing{n}, Void}}

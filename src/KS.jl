@@ -7,7 +7,6 @@ module KS
 include("wavenumbers.jl")
 include("ftfield.jl")
 include("field.jl")
-include("variational.jl")
 include("ffts.jl")
 include("forcing.jl")
 include("system.jl")
