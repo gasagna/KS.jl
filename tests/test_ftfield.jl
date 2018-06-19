@@ -1,4 +1,13 @@
 @testset "constructors and indexing              " begin
+    @testset "pass function to FTField           " begin
+        U = FTField(2, 1.0, true)
+        @test U[WaveNumber(1)] == 0
+        @test U[WaveNumber(2)] == 0
+
+        V = FTField(2, 1.0, true, k->k+im*k)
+        @test V[WaveNumber(1)] == 1+im*1
+        @test V[WaveNumber(2)] == 2+im*2
+    end
     @testset "full space                         " begin
         for U in [FTField([1.0, 2.0, 3.0, 4.0], 1, false),
                    FTField([1.0+2.0*im, 3.0+4.0*im], 1, false)]

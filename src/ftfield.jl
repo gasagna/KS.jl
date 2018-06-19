@@ -79,8 +79,8 @@ _weave(x::AbstractVector, ::Val{false}) = x
 
 
 # ////// outer constructors //////
-FTField(n::Int, L::Real, isodd::Bool) =
-    FTField(zeros(Complex{Float64}, n), L, isodd)
+FTField(n::Int, L::Real, isodd::Bool, fun=k->0) =
+    FTField(Complex{Float64}[fun(k) for k in 1:n], L, isodd)
 
 FTField(input::Vector{<:Complex}, L::Real, isodd::Bool) =
     FTField{length(input), isodd}(input, L)
