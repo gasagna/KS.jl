@@ -1,6 +1,6 @@
 @testset "system                                 " begin
     F = KSEq(2, 4, 0, false)
-    L, N = imex(F)
+    N, L = splitexim(F)
     U  = FTField(2, 4, false)
     U[WaveNumber(1)] = 0.5+im*0.1
     U[WaveNumber(2)] = 0.2+im*0.1

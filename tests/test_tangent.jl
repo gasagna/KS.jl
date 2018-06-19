@@ -6,14 +6,12 @@
         # nonlinear system
         F = KSEq(n, L, c, false, :forward)
         scheme = Scheme(:CB4_4R3R, FTField(n, L, ISODD))
-        _a, _b = imex(F)
-        ϕ = integrator(_b, _a, scheme, dt)
+        ϕ = integrator(splitexim(F)..., scheme, dt)
 
         # augmented system
         F = KSEq(n, L, c, false, :tangent)
         scheme = Scheme(:CB4_4R3R, VarFTField(n, L, ISODD))
-        _a, _b = imex(F)
-        ϕψ = integrator(_b, _a, scheme, dt)
+        ϕψ = integrator(splitexim(F)..., scheme, dt)
 
         # random initial condition
         U = FTField(n, L, ISODD); U .= 1e-2
@@ -52,8 +50,7 @@
         # augmented system
         F = KSEq(n, L, c, false, :tangent)
         scheme = Scheme(:CB4_4R3R, VarFTField(n, L, ISODD))
-        _a, _b = imex(F)
-        ϕψ = integrator(_b, _a, scheme, dt)
+        ϕψ = integrator(splitexim(F)..., scheme, dt)
 
         # zero initial condition
         U = FTField(n, L, ISODD)
