@@ -56,10 +56,12 @@ end
 NonLinearKSEqTerm(n::Int, L::Real, c::Real, ISODD::Bool) =
     NonLinearKSEqTerm{n, ISODD}(L, c)
 
-@inline function (nlks::NonLinearKSEqTerm{n, ISODD, FT})(t::Real,
-                                                         U::FT,
-                                                         dUdt::FT,
-                                                         add::Bool=false) where {n, ISODD, FT<:AbstractFTField{n}}
+@inline function 
+    (nlks::NonLinearKSEqTerm{n, ISODD, FT})(t::Real,
+                                            U::FT,
+                                            dUdt::FT,
+                                            add::Bool=false) where {n, 
+                                                  ISODD, FT<:AbstractFTField{n}}
     _set_symmetry!(U)                     # enforce symmetries
     nlks.ifft(U, nlks.u)                  # copy and inverse transform
     nlks.u .= .- 0.5.*(nlks.c.+nlks.u).^2 # sum c, square and divide by 2
@@ -68,19 +70,25 @@ NonLinearKSEqTerm(n::Int, L::Real, c::Real, ISODD::Bool) =
     _set_symmetry!(nlks.V)                # enforce symmetries
 
     add == true ? (dUdt .+= nlks.V) : (dUdt .= nlks.V)
-    dUdt
+    return dUdt
 end
 
 
 # ////// COMPLETE EQUATION //////
-struct KSEq{n, ISODD, LIN<:LinearKSEqTerm{n}, NLIN<:NonLinearKSEqTerm{n, ISODD}, G<:Union{AbstractForcing{n}, Void}}
+struct KSEq{n,
+            ISODD,
+            G<:Union{AbstractForcing{n}, Void},
+            LIN<:LinearKSEqTerm{n},
+            NLIN<:NonLinearKSEqTerm{n, ISODD}}
         lks::LIN
        nlks::NLIN
     forcing::G
     function KSEq{n, ISODD}(L::Real, c::Real, forcing::G) where {n, ISODD, G}
         nlks = NonLinearKSEqTerm(n, L, c, ISODD)
         lks  = LinearKSEqTerm(n, L, ISODD)
-        new{n, ISODD, typeof(lks), typeof(nlks), typeof(forcing)}(lks, nlks, forcing)
+        new{n, ISODD, typeof(forcing), typeof(lks), typeof(nlks)}(lks,
+                                                                  nlks,
+                                                                  forcing)
     end
 end
 
@@ -88,25 +96,22 @@ KSEq(n::Int,
      L::Real,
      c::Real,
      ISODD::Bool,
-     forcing::Union{AbstractForcing, Void}=nothing) = KSEq{n, ISODD}(L, c, forcing)
+     forcing::Union{AbstractForcing, Void}=nothing) = 
+    KSEq{n, ISODD}(L, c, forcing)
 
 # split into implicit and explicit terms
-function splitexim(ks::KSEq{n, ISODD, LIN, NLIN, G}) where {n, ISODD, LIN, NLIN, G<:Union{AbstractForcing{n}, Void}}
-    @inline function wrapper(t::Real, U::AbstractFTField{n}, dUdt::AbstractFTField{n})
-        ks.nlks(t, U, dUdt, false)                     # eval nonlinear term
-        G <: AbstractForcing && ks.forcing(t, U, dUdt) # only eval if there is a forcing
+function splitexim(ks::KSEq{n, ISODD, G}) where {n, ISODD, G}
+    @inline function wrapper(t::Real,
+                             U::AbstractFTField{n},
+                             dUdt::AbstractFTField{n})
+        ks.nlks(t, U, dUdt, false)
+        G <: AbstractForcing && ks.forcing(t, U, dUdt)
         return dUdt
     end
     return wrapper, ks.lks
 end
 
 # evaluate right hand side of equation
-(ks::KSEq{n, ISODD, LIN, NLIN, G})(t::Real, U::FT, dUdt::FT) where {n, ISODD, LIN, NLIN, G, FT<:AbstractFTField{n}} =
-    (A_mul_B!(dUdt, ks.lks, U);                      # linear term
-     ks.nlks(t, U, dUdt, true);                      # nonlinear term (add value)
-     G <: AbstractForcing && ks.forcing(t, U, dUdt); # add forcing
-     return dUdt)
-
 
 # # ////// LINEARISED EQUATION //////
 # struct LinearisedKSEq{n, FT<:FTField{n}, F<:Field{n}}
@@ -142,4 +147,10 @@ end
 #     end
 
 #     dwkdt
-# end
+# end(ks::KSEq{n, ISODD, G})(t::Real,
+                        U::FT,
+                        dUdt::FT) where {n, ISODD, G, FT<:AbstractFTField{n}} =
+    (A_mul_B!(dUdt, ks.lks, U);
+     ks.nlks(t, U, dUdt, true);
+     G <: AbstractForcing && ks.forcing(t, U, dUdt); dUdt)
+
