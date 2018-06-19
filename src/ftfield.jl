@@ -94,7 +94,7 @@ end
 
 # ////// Enforce symmetries, if needed //////
 _set_symmetry!(U::AbstractFTField{n,  true}) where {n} =
-    (@inbounds @simd for k in wavenumbers(1:n)
+    (@inbounds @simd for k in wavenumbers(n)
         U[k] = im.*imag(U[k])
      end; U)
 
@@ -139,18 +139,18 @@ Base.copy(U::FTField) = (V = similar(U); V .= U; V)
 
 # ////// inner product and norm //////
 Base.dot(U::FTField{n}, V::FTField{n}) where {n} =
-    2*real(sum(U[k]*conj(V[k]) for k in wavenumbers(1:n)))
+    2*real(sum(U[k]*conj(V[k]) for k in wavenumbers(n)))
 
 Base.norm(U::FTField) = sqrt(dot(U, U))
 
 # ////// squared norm of the difference //////
 dotdiff(U::FTField{n}, V::FTField{n}) where {n} =
-    2*real(sum(abs2(U[k] - V[k]) for k in wavenumbers(1:n)))
+    2*real(sum(abs2(U[k] - V[k]) for k in wavenumbers(n)))
 
 
 # ////// shifts and differentiation //////
 Base.shift!(U::AbstractFTField{n}, s::Real) where {n} =
-    (@inbounds @simd for k in wavenumbers(1:n)
+    (@inbounds @simd for k in wavenumbers(n)
          U[k] *= exp(im*2π*s/U.L*k)
      end; U)
 

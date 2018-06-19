@@ -12,9 +12,16 @@
 end
 
 @testset "wave numbers vector                    " begin
-    ks = wavenumbers(1:3:5)
-    for (i, k) in zip(1:3:5, ks)
+    ks = wavenumbers(5)
+    for (i, k) in zip(1:5, ks)
         @test typeof(k) == WaveNumber
         @test k         == i
     end
+end
+
+@testset "allocations                            " begin
+    foo(o, f) = (for i = 1:1000; ddx!(o, f) end)
+    f = FTField(100, 1.0, true)
+    ddx!(f)
+    @test (@allocated ddx!(f)) == 0
 end

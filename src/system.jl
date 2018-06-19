@@ -12,7 +12,7 @@ struct LinearKSEqTerm{n, ISODD, FT<:AbstractFTField{n}}
     A::FT
     function LinearKSEqTerm{n, ISODD}(L::Real) where {n, ISODD}
         qk = FTField(n, L, ISODD)
-        for k in wavenumbers(1:n)
+        for k in wavenumbers(n)
             qk[k] = (2π/L*k)^2 - (2π/L*k)^4
         end
         new{n, ISODD, typeof(qk)}(qk)
@@ -25,7 +25,7 @@ LinearKSEqTerm(n::Int, L::Real, ISODD::Bool) = LinearKSEqTerm{n, ISODD}(L)
                       lks::LinearKSEqTerm{n, ISODD},
                       U::AbstractFTField{n}) where {n, ISODD} =
     (_set_symmetry!(U);
-     @inbounds @simd for k in wavenumbers(1:n)
+     @inbounds for k in wavenumbers(n)
          dUdt[k] = lks.A[k] * U[k]
      end; dUdt)
 
@@ -34,7 +34,7 @@ LinearKSEqTerm(n::Int, L::Real, ISODD::Bool) = LinearKSEqTerm{n, ISODD}(L)
                     U::AbstractFTField{n},
                     dUdt::AbstractFTField{n}) where {n, ISODD} =
     (_set_symmetry!(U);
-     @inbounds @simd for k in wavenumbers(1:n)
+     @inbounds for k in wavenumbers(n)
           dUdt[k] = U[k]/(1 - c*lks.A[k])
      end; dUdt)
 

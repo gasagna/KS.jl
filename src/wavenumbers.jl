@@ -30,6 +30,5 @@ for op in [:+, :-, :*, :/, :<, :<=]
     end
 end
 
-# obtain a vector of wave numbers for iteration
-wavenumbers(rng::Range) =
-    range(WaveNumber.((first(rng), step(rng), last(rng)))...)
+# obtain an iterable of wave numbers for iteration
+wavenumbers(n::Int) = WaveNumber(1):WaveNumber(n)
