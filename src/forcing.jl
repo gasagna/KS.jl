@@ -8,6 +8,19 @@ export SensitivityForcing, SteadyForcing
 abstract type AbstractForcing{n} end
 
 
+# ////// DUMMY FORCING - DOES NOTHING //////
+struct DummyForcing{n} <: AbstractForcing{n} end
+
+DummyForcing(n::Int) = DummyForcing{n}()
+
+# call for nonlinear equation
+(::DummyForcing{n})(t, U::FT, dUdt::FT) where {n, FT<:AbstractFTField{n}} = dUdt
+
+# and for the linear equation
+(::DummyForcing{n})(t, U::FT,
+                       V::FT, dVdt::FT) where {n, FT<:AbstractFTField{n}} = dVdt
+
+
 # ////// STEADY FORCING //////
 struct SteadyForcing{n, FT<:AbstractFTField{n}} <: AbstractForcing{n}
     H::FT
@@ -24,38 +37,17 @@ Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.H[i] = val)
 
 
 
-# ////// FORCING FOR THE SENSITIVITY EQUATIONS //////
-struct SensitivityForcing{n, FT<:AbstractFTField{n}, F} <: AbstractForcing{n}
-    tmp::FT    # temporary: set to full space 
-    χ::Float64
-    f::F       
-end
+# ////// FORCING FOR THE SENSITIVITY EQUATIONS - THIS IS -uₓ //////
+struct SensitivityForcing{n} <: AbstractForcing{n} end
 
 # constructors
-SensitivityForcing(n::Int, L::Real, χ::Real, f) =
-    SensitivityForcing(FTField(n, L, false), χ, f)
-
-SensitivityForcing(U::FTField{n}, χ::Real, f) where {n} =
-    SensitivityForcing{n, typeof(U), typeof(f)}(U, χ, f)
+SensitivityForcing(n::Int) = SensitivityForcing{n}()
 
 # obey callable interface
-@inline function (sf::SensitivityForcing{n})(t::Real, 
-                                             UV::FT, 
-                                             dUVdt::FT) where {n, 
-                                                ISODD, FT<:VarFTField{n, ISODD}}
-    # aliases
-    dUVdt_state, dUVdt_prime = state(dUVdt), prime(dUVdt)
-
-    # this is fₚ(u(x,t))
-    sf.tmp .= state(UV)
-    ddx!(sf.tmp)
-    dUVdt_prime .-= sf.tmp
-
-    # this is χ⋅f(u(x,t))
-    if sf.χ != 0
-        sf.f(t, state(UV), sf.tmp)
-        dUVdt_prime .+= sf.χ .* sf.tmp
-    end
-
-    return dUVdt
-end
+(::SensitivityForcing{n})(t::Real,
+                          U::FT,
+                          V::FT,
+                          dVdt::FT) where {n, FT<:FTField{n}} =
+    (@inbounds @simd for k in wavenumbers(n);
+          dVdt[k] -= im*2π/U.L*k*U[k]
+     end; dVdt)
