@@ -2,7 +2,7 @@
 # Copyright 2017-18, Davide Lasagna, AFM, University of Southampton #
 # ----------------------------------------------------------------- #
 
-export SensitivityForcing, SteadyForcing
+export SensitivityWRTViscosity, SteadyForcing
 
 # ////// FORCING //////
 abstract type AbstractForcing{n} end
@@ -36,18 +36,17 @@ Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.H[i] = val)
     (dUdt .+= sf.H; return dUdt)
 
 
-
-# ////// FORCING FOR THE SENSITIVITY EQUATIONS - THIS IS -uₓ //////
-struct SensitivityForcing{n} <: AbstractForcing{n} end
+# ////// Sensitivity with respect to ν //////
+struct SensitivityWRTViscosity{n} <: AbstractForcing{n} end
 
 # constructors
-SensitivityForcing(n::Int) = SensitivityForcing{n}()
+SensitivityWRTViscosity(n::Int) = SensitivityWRTViscosity{n}()
 
 # obey callable interface
-(::SensitivityForcing{n})(t::Real,
+(::SensitivityWRTViscosity{n})(t::Real,
                           U::FT,
                           V::FT,
                           dVdt::FT) where {n, FT<:FTField{n}} =
     (@inbounds @simd for k in wavenumbers(n);
-          dVdt[k] -= im*2π/U.L*k*U[k]
+          dVdt[k] -= k^4*U[k]
      end; dVdt)
