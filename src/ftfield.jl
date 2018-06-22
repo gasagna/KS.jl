@@ -89,7 +89,7 @@ end
 # ////// Enforce symmetries, if needed //////
 _set_symmetry!(U::AbstractFTField{n,  true}) where {n} =
     (@inbounds @simd for k in wavenumbers(n)
-        U[k] = im.*imag(U[k])
+        U[k] = im*imag(U[k])
      end; U)
 
 _set_symmetry!(U::AbstractFTField{n, false}) where {n} =  U
