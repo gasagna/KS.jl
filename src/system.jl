@@ -13,15 +13,16 @@ export KSEq,
 # ////// LINEAR TERM //////
 struct LinearKSEqTerm{n, ISODD, FT<:AbstractFTField{n}}
     A::FT
-    function LinearKSEqTerm{n, ISODD}(L::Real) where {n, ISODD}
-        qk = FTField(n, L, ISODD)
+    function LinearKSEqTerm{n, ISODD}(ν::Real) where {n, ISODD}
+        ν > 0 || throw(ArgumentError("viscosity must be positive"))
+        A = FTField(n, ISODD)
         for k in wavenumbers(n)
-            qk[k] = (2π/L*k)^2 - (2π/L*k)^4
+            A[k] = k^2 - ν*k^4
         end
-        new{n, ISODD, typeof(qk)}(qk)
+        new{n, ISODD, typeof(A)}(A)
     end
 end
-LinearKSEqTerm(n::Int, L::Real, ISODD::Bool) = LinearKSEqTerm{n, ISODD}(L)
+LinearKSEqTerm(n::Int, ν::Real, ISODD::Bool) = LinearKSEqTerm{n, ISODD}(ν)
 
 # obey Flows interface
 @inline Base.A_mul_B!(dUdt::AbstractFTField{n},
@@ -44,20 +45,18 @@ LinearKSEqTerm(n::Int, L::Real, ISODD::Bool) = LinearKSEqTerm{n, ISODD}(L)
 
 # ////// NONLINEAR TERM //////
 struct NonLinearKSEqTerm{n, ISODD, FT<:AbstractFTField{n}, F<:AbstractField{n}}
-     c::Float64 # mean flow velocity
      V::FT      # temporary in Fourier space
      u::F       # solution in physical space
     ifft        # plans
     fft         #
-    function NonLinearKSEqTerm{n, ISODD}(L::Real, c::Real) where {n, ISODD}
-        V = FTField(n, L, ISODD); u = Field(n, L)
+    function NonLinearKSEqTerm{n, ISODD}() where {n, ISODD}
+        V = FTField(n, ISODD); u = Field(n)
         fft, ifft = ForwardFFT(u), InverseFFT(V)
-        new{n, ISODD, typeof(V), typeof(u)}(c, V, u, ifft, fft)
+        new{n, ISODD, typeof(V), typeof(u)}(V, u, ifft, fft)
     end
 end
 
-NonLinearKSEqTerm(n::Int, L::Real, c::Real, ISODD::Bool) =
-    NonLinearKSEqTerm{n, ISODD}(L, c)
+NonLinearKSEqTerm(n::Int, ISODD::Bool) = NonLinearKSEqTerm{n, ISODD}()
 
 @inline function
     (nlks::NonLinearKSEqTerm{n, ISODD, FT})(t::Real,
@@ -65,14 +64,14 @@ NonLinearKSEqTerm(n::Int, L::Real, c::Real, ISODD::Bool) =
                                             dUdt::FT,
                                             add::Bool=false) where {n,
                                                   ISODD, FT<:AbstractFTField{n}}
-    nlks.ifft(U, nlks.u)                  # copy and inverse transform
-    nlks.u .= .- 0.5.*(nlks.c.+nlks.u).^2 # sum c, square and divide by 2
-    nlks.fft(nlks.u, nlks.V)              # forward transform
-    ddx!(nlks.V)                          # differentiate
+    _set_symmetry!(U)
+    nlks.ifft(U, nlks.u)        # copy and inverse transform
+    nlks.u .= nlks.u.^2         # square
+    nlks.fft(nlks.u, nlks.V)    # forward transform
+    ddx!(nlks.V)                # differentiate
 
     # store and enforce symmetries
-    add == true ? (dUdt .+= nlks.V) : (dUdt .= nlks.V)
-    _set_symmetry!(dUdt)
+    add == true ? (dUdt .+= 0.5.*nlks.V) : (dUdt .= 0.5.*nlks.V)
 
     return dUdt
 end
@@ -87,9 +86,9 @@ struct KSEq{n,
         lks::LIN
        nlks::NLIN
     forcing::G
-    function KSEq{n, ISODD}(L::Real, c::Real, forcing::G) where {n, ISODD, G}
-        nlks = NonLinearKSEqTerm(n, L, c, ISODD)
-        lks  = LinearKSEqTerm(n, L, ISODD)
+    function KSEq{n, ISODD}(ν::Real, forcing::G) where {n, ISODD, G}
+        nlks = NonLinearKSEqTerm(n, ISODD)
+        lks  = LinearKSEqTerm(n, ν, ISODD)
         new{n, ISODD, typeof(forcing), typeof(lks), typeof(nlks)}(lks,
                                                                   nlks,
                                                                   forcing)
@@ -97,11 +96,10 @@ struct KSEq{n,
 end
 
 KSEq(n::Int,
-     L::Real,
-     c::Real,
+     ν::Real,
      ISODD::Bool,
      forcing::AbstractForcing=DummyForcing(n)) =
-    KSEq{n, ISODD}(L, c, forcing)
+    KSEq{n, ISODD}(ν, forcing)
 
 # split into implicit and explicit terms
 function splitexim(ks::KSEq{n}) where {n}
@@ -121,28 +119,25 @@ end
 
 # ////// LINEAR EQUATION //////
 struct LinearisedKSEqExTerm{n, ISODD, FT<:FTField{n}, F<:Field{n}}
-       c::Float64  # mean flow velocity
-    TMP1::FT       # temporary in Fourier space
-    TMP2::FT       # temporary in Fourier space
-    tmp1::F        # temporary in physical space
-    tmp2::F        # temporary in physical space
-    tmp3::F        # temporary in physical space
-    ifft           # plans
-    fft            #
-    function LinearisedKSEqExTerm{n, ISODD}(L::Real, c::Real) where {n, ISODD}
-        TMP1 = FTField(n, L, ISODD); TMP2 = FTField(n, L, ISODD)
-        tmp1 = Field(n, L); tmp2 = Field(n, L); tmp3 = Field(n, L)
+    TMP1::FT # temporary in Fourier space
+    TMP2::FT # temporary in Fourier space
+    tmp1::F  # temporary in physical space
+    tmp2::F  # temporary in physical space
+    tmp3::F  # temporary in physical space
+    ifft     # plans
+    fft      #
+    function LinearisedKSEqExTerm{n, ISODD}() where {n, ISODD}
+        TMP1 = FTField(n, ISODD); TMP2 = FTField(n, ISODD)
+        tmp1 = Field(n); tmp2 = Field(n); tmp3 = Field(n)
         ifft = InverseFFT(TMP1); fft  = ForwardFFT(tmp1)
-        new{n, ISODD, typeof(TMP1), typeof(tmp1)}(c,
-                TMP1, TMP2, tmp1, tmp2, tmp3, ifft, fft)
+        new{n, ISODD, typeof(TMP1), typeof(tmp1)}(TMP1, 
+                TMP2, tmp1, tmp2, tmp3, ifft, fft)
     end
 end
 
 # constructor
-LinearisedKSEqExTerm(n::Int,
-                     L::Real,
-                     c::Real,
-                     ISODD::Bool) = LinearisedKSEqExTerm{n, ISODD}(L, c)
+LinearisedKSEqExTerm(n::Int, ISODD::Bool) = 
+    LinearisedKSEqExTerm{n, ISODD}()
 
 
 # evaluate linear operator around U
@@ -151,17 +146,17 @@ function (lks::LinearisedKSEqExTerm{n})(t::Real,
                                         V::FTField{n},
                                         dVdt::FTField{n},
                                         add::Bool=false) where {n}
-    # /// calculate (c + u) * vₓ ///
-    lks.ifft(U, lks.tmp1)                      # transform U to physical space
-    ddx!(lks.TMP2, V)                          # differentiate V
-    lks.ifft(lks.TMP2, lks.tmp2)               # transform to physical space
-    lks.tmp3 .= (lks.c .+ lks.tmp1).* lks.tmp2 # multiply in physical space
+    # /// calculate u * vₓ ///
+    lks.ifft(U, lks.tmp1)            # transform U to physical space
+    ddx!(lks.TMP2, V)                # differentiate V
+    lks.ifft(lks.TMP2, lks.tmp2)     # transform to physical space
+    lks.tmp3 .= lks.tmp1 .* lks.tmp2 # multiply in physical space
 
     # /// calculate v * uₓ ///
-    lks.ifft(V, lks.tmp1)                       # transform V to physical space
-    ddx!(lks.TMP2, U)                           # differentiate U
-    lks.ifft(lks.TMP2, lks.tmp2)                # transform to physical space
-    lks.tmp3 .+= lks.tmp1 .* lks.tmp2           # multiply in physical space
+    lks.ifft(V, lks.tmp1)             # transform V to physical space
+    ddx!(lks.TMP2, U)                 # differentiate U
+    lks.ifft(lks.TMP2, lks.tmp2)      # transform to physical space
+    lks.tmp3 .+= lks.tmp1 .* lks.tmp2 # multiply in physical space
 
     # /// transform back bilinear term to wave number space ///
     lks.fft(lks.tmp3, lks.TMP2)
@@ -189,20 +184,19 @@ mutable struct LinearisedKSEq{n,
 end
 
 # set χ constant
-set_χ!(l::LinearisedKSEq, χ::Real) = (l.χ = χ; nothing)
+set_χ!(eq::LinearisedKSEq, χ::Real) = (eq.χ = χ; nothing)
 
 # outer constructor: main entry point
 function LinearisedKSEq(n::Int,
-                        L::Real,
-                        c::Real,
+                        ν::Real,
                         ISODD::Bool,
                         mon::Flows.AbstractMonitor{T, X},
                         χ::Real=0,
                         forcing::AbstractForcing=DummyForcing(n)) where {T, X}
     X <: FTField{n, ISODD} || error("invalid monitor object")
-    imTerm = LinearKSEqTerm(n, L, ISODD)
-    exTerm = LinearisedKSEqExTerm(n, L, c, ISODD)
-    TMP = FTField(n, L, ISODD)
+    imTerm = LinearKSEqTerm(n, ν, ISODD)
+    exTerm = LinearisedKSEqExTerm(n, ISODD)
+    TMP = FTField(n, ISODD)
     LinearisedKSEq{n,
                    typeof(imTerm),
                    typeof(exTerm),

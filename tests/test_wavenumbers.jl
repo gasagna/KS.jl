@@ -21,7 +21,7 @@ end
 
 @testset "allocations                            " begin
     foo(o, f) = (for i = 1:1000; ddx!(o, f) end)
-    f = FTField(100, 1.0, true)
+    f = FTField(100, true)
     ddx!(f)
     @test (@allocated ddx!(f)) == 0
 end

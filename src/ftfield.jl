@@ -30,32 +30,26 @@ struct FTField{n,
     data::V    # the data as a complex array
     dofs::VL   # linearised data for fast look-up of the degrees of freedom
                # this is a essentially a view over data
-    L::Float64 # the length of the domain
-
     # with complex input
-    function FTField{n, ISODD}(input::V,
-                                   L::Real) where {n,
-                                                   ISODD,
-                                                   T<:Real,
-                                                   V<:AbstractVector{Complex{T}}}
+    function FTField{n, ISODD}(input::V) where {n,
+                                                ISODD,
+                                                T<:Real,
+                                                V<:AbstractVector{Complex{T}}}
         # checks
-        L > 0 || throw(ArgumentError("domain size must be positive"))
         length(input) == n || throw(ArgumentError("inconsistent input"))
 
         # create data and view
         data = vcat(zero(Complex{T}), input, zero(Complex{T}))
         dofs = reinterpret(T, data)
-        new{n, ISODD, T, typeof(data), typeof(dofs)}(data, dofs, L)
+        new{n, ISODD, T, typeof(data), typeof(dofs)}(data, dofs)
     end
 
     # with real input
-    function FTField{n, ISODD}(input::V,
-                                   L::Real) where {n,
-                                                   ISODD,
-                                                   T<:Real,
-                                                   V<:AbstractVector{T}}
+    function FTField{n, ISODD}(input::V) where {n,
+                                                ISODD,
+                                                T<:Real,
+                                                V<:AbstractVector{T}}
         # checks
-        L > 0 || throw(ArgumentError("domain size must be positive"))
         ISODD == true  && (length(input) ==  n ||
             throw(ArgumentError("inconsistent input")))
         ISODD == false && (length(input) == 2n ||
@@ -64,7 +58,7 @@ struct FTField{n,
         # create data and view
         dofs = vcat(zero(T), zero(T), _weave(input, Val{ISODD}()), zero(T), zero(T))
         data = reinterpret(Complex{T}, dofs)
-        new{n, ISODD, T, typeof(data), typeof(dofs)}(data, dofs, L)
+        new{n, ISODD, T, typeof(data), typeof(dofs)}(data, dofs)
     end
 end
 
@@ -79,16 +73,16 @@ _weave(x::AbstractVector, ::Val{false}) = x
 
 
 # ////// outer constructors //////
-FTField(n::Int, L::Real, isodd::Bool, fun=k->0) =
-    FTField(Complex{Float64}[fun(k) for k in 1:n], L, isodd)
+FTField(n::Int, isodd::Bool, fun=k->0) =
+    FTField(Complex{Float64}[fun(k) for k in 1:n], isodd)
 
-FTField(input::Vector{<:Complex}, L::Real, isodd::Bool) =
-    FTField{length(input), isodd}(input, L)
+FTField(input::Vector{<:Complex}, isodd::Bool) =
+    FTField{length(input), isodd}(input)
 
-function FTField(input::Vector{<:Real}, L::Real, isodd::Bool)
+function FTField(input::Vector{<:Real}, isodd::Bool)
     N = length(input)
-    return isodd == true ? FTField{N,    isodd}(input, L) :
-                           FTField{N>>1, isodd}(input, L)
+    return isodd == true ? FTField{N,    isodd}(input) :
+                           FTField{N>>1, isodd}(input)
 end
 
 
@@ -99,7 +93,6 @@ _set_symmetry!(U::AbstractFTField{n,  true}) where {n} =
      end; U)
 
 _set_symmetry!(U::AbstractFTField{n, false}) where {n} =  U
-
 
 
 # ////// array interface //////
@@ -133,7 +126,7 @@ Base.checkbounds(U::AbstractFTField{n}, i::Int) where {n} =
     (@boundscheck checkbounds(U, k); setindex!(U.data, val, k+1))
 
 
-Base.similar(U::FTField{n, ISODD}) where {n, ISODD} = FTField(n, U.L, ISODD)
+Base.similar(U::FTField{n, ISODD}) where {n, ISODD} = FTField(n, ISODD)
 Base.copy(U::FTField) = (V = similar(U); V .= U; V)
 
 
@@ -151,13 +144,13 @@ dotdiff(U::FTField{n}, V::FTField{n}) where {n} =
 # ////// shifts and differentiation //////
 Base.shift!(U::AbstractFTField{n}, s::Real) where {n} =
     (@inbounds @simd for k in wavenumbers(n)
-         U[k] *= exp(im*2π*s/U.L*k)
+         U[k] *= exp(im*s*k)
      end; U)
 
 # modify first argument
 ddx!(iKU::AbstractFTField{n}, U::AbstractFTField{n}) where {n} =
-	(@inbounds @simd for k in wavenumbers(n)
-         iKU[k] = im*2π/U.L*k*U[k]
+    (@inbounds for k in wavenumbers(n)
+         iKU[k] = im*(k*U[k])
      end; iKU)
 
 # in-place function

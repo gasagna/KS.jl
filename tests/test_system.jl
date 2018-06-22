@@ -1,7 +1,7 @@
 @testset "system                                 " begin
-    F = KSEq(2, 4, 0, false)
+    F = KSEq(2, 1.0, false)
     N, L = splitexim(F)
-    U  = FTField(2, 4, false)
+    U  = FTField(2, false)
     U[WaveNumber(1)] = 0.5+im*0.1
     U[WaveNumber(2)] = 0.2+im*0.1
     out1, out2, out3 = similar(U), similar(U), similar(U)

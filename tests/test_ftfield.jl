@@ -1,16 +1,16 @@
 @testset "constructors and indexing              " begin
     @testset "pass function to FTField           " begin
-        U = FTField(2, 1.0, true)
+        U = FTField(2, true)
         @test U[WaveNumber(1)] == 0
         @test U[WaveNumber(2)] == 0
 
-        V = FTField(2, 1.0, true, k->k+im*k)
+        V = FTField(2, true, k->k+im*k)
         @test V[WaveNumber(1)] == 1+im*1
         @test V[WaveNumber(2)] == 2+im*2
     end
     @testset "full space                         " begin
-        for U in [FTField([1.0, 2.0, 3.0, 4.0], 1, false),
-                   FTField([1.0+2.0*im, 3.0+4.0*im], 1, false)]
+        for U in [FTField([1.0, 2.0, 3.0, 4.0], false),
+                  FTField([1.0+2.0*im, 3.0+4.0*im], false)]
 
             @test eltype(U) == Float64
             @test length(U) == 4
@@ -27,7 +27,7 @@
         end
 
         # other constructor and wave numbers
-        U = FTField(2, 1, false)
+        U = FTField(2, false)
         @test eltype(U) == Float64
         @test length(U) == 4
         @test size(U) == (4, )
@@ -40,8 +40,8 @@
         @test_throws BoundsError U[WaveNumber(3)]
     end
     @testset "odd space                           " begin
-        for U in [FTField([1.0, 2.0, 3.0, 4.0], 1, true),
-                   FTField([1.0*im, 2.0*im, 3.0*im, 4.0*im], 1, true)]
+        for U in [FTField([1.0, 2.0, 3.0, 4.0], true),
+                  FTField([1.0*im, 2.0*im, 3.0*im, 4.0*im], true)]
 
             @test eltype(U) == Float64
             @test length(U) == 4
@@ -58,7 +58,7 @@
         end
 
         # other constructor and wave numbers
-        U = FTField(4, 1, true)
+        U = FTField(4, true)
         @test eltype(U) == Float64
         @test length(U) == 4
         @test size(U) == (4, )
@@ -73,7 +73,7 @@ end
 
 @testset "similar and copy                       " begin
     @testset "odd space                           " begin
-        U = FTField(4, 1, true)
+        U = FTField(4, true)
         V = similar(U)
         @test length(V) == 4
         @test size(V) == (4, )
@@ -82,7 +82,7 @@ end
         @test V[WaveNumber(3)] == 0.0 + 0.0*im
         @test V[WaveNumber(4)] == 0.0 + 0.0*im
 
-        V = copy(FTField([1, 2], 1, true))
+        V = copy(FTField([1, 2], true))
         @test length(V) == 2
         @test size(V) == (2, )
         @test V[WaveNumber(1)] == 0.0+1.0*im
@@ -91,14 +91,14 @@ end
         @test V[2] == 2.0
     end
     @testset "full space                           " begin
-        U = FTField(2, 1, false)
+        U = FTField(2, false)
         V = similar(U)
         @test length(V) == 4
         @test size(V) == (4, )
         @test V[WaveNumber(1)] == 0.0 + 0.0*im
         @test V[WaveNumber(2)] == 0.0 + 0.0*im
 
-        V = copy(FTField([1.0+2.0*im, 3.0+4.0*im], 1, false))
+        V = copy(FTField([1.0+2.0*im, 3.0+4.0*im], false))
         @test length(V) == 4
         @test size(V) == (4, )
         @test V[WaveNumber(1)] == 1.0+2.0*im
@@ -112,25 +112,25 @@ end
 
 @testset "dot and norm                           " begin
     # cos(x)*cos(x)
-    U = FTField(2, 1, false); U[WaveNumber(1)] = 0.5
+    U = FTField(2, false); U[WaveNumber(1)] = 0.5
     @test dot(U, U) == 0.5
     @test norm(U) == sqrt(0.5)
 
     # cos(x)*sin(x)
-    U = FTField(2, 1, false); U[WaveNumber(1)] =  0.5
-    V = FTField(2, 1, false); V[WaveNumber(1)] = -0.5*im
+    U = FTField(2, false); U[WaveNumber(1)] =  0.5
+    V = FTField(2, false); V[WaveNumber(1)] = -0.5*im
     @test dot(U, V) == 0.0
 
     # sin(2x)*sin(2x)
-    U = FTField(2, 1, true); U[WaveNumber(1)] = -0.5*im
-    V = FTField(2, 1, true); V[WaveNumber(1)] = -0.5*im
+    U = FTField(2, true); U[WaveNumber(1)] = -0.5*im
+    V = FTField(2, true); V[WaveNumber(1)] = -0.5*im
     @test dot(U, U) == 0.5
     @test norm(U) == sqrt(0.5)
 end
 
 @testset "broadcast                              " begin
     @testset "full space                         " begin
-        U = FTField(2, 1, false)
+        U = FTField(2, false)
         U .= [1, 2, 3, 4]
         @test U[1] == 1
         @test U[2] == 2
@@ -143,7 +143,7 @@ end
         @test U[4] == 17
     end
     @testset "odd space                          " begin
-        U = FTField(4, 1, true)
+        U = FTField(4, true)
         U .= [1, 2, 3, 4]
         @test U[1] == 1
         @test U[2] == 2
@@ -159,7 +159,7 @@ end
 
 @testset "symmetry                               " begin
     @testset "full space                         " begin
-        U = FTField([1, 2, 3, 4], 1, false)
+        U = FTField([1, 2, 3, 4], false)
 
         KS._set_symmetry!(U)
         @test U[WaveNumber(1)] == 1+2*im
@@ -167,7 +167,7 @@ end
     end
 
     @testset "odd space                         " begin
-        U  = FTField(2, 1, true)
+        U  = FTField(2, true)
 
         # break the invariance
         U[WaveNumber(1)] = 1+2*im
