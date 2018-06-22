@@ -13,7 +13,8 @@ _fix_FFT!(U::FTField{n}) where {n} =
     (@inbounds U.data[1]   = 0; 
      @inbounds U.data[n+2] = 0; U)
 
-_normalise!(U::FTField{n}) where {n} = (U .*= 1/(2*(n+1)); U)
+# scale complex Fourier coefficients
+_normalise!(U::FTField{n}) where {n} = (U.data .*= 1/(2n+2); U)
 
 # ////// FORWARD TRANSFORM //////
 struct ForwardFFT{n, P}
