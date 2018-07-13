@@ -44,9 +44,9 @@ SensitivityWRTViscosity(n::Int) = SensitivityWRTViscosity{n}()
 
 # obey callable interface
 (::SensitivityWRTViscosity{n})(t::Real,
-                          U::FT,
-                          V::FT,
-                          dVdt::FT) where {n, FT<:FTField{n}} =
+                               U::FT,
+                               V::FT,
+                               dVdt::FT) where {n, FT<:FTField{n}} =
     (@inbounds @simd for k in wavenumbers(n);
           dVdt[k] -= k^4*U[k]
      end; dVdt)
