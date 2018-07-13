@@ -9,6 +9,7 @@ include("ftfield.jl")
 include("field.jl")
 include("ffts.jl")
 include("forcing.jl")
-include("system.jl")
+include("nonlinear.jl")
+include("linear.jl")
 
 end
