@@ -37,20 +37,20 @@ LinearTerm(n::Int, ν::Real, ISODD::Bool, mode::AbstractMode) =
 
 # obey Flows interface
 @inline Base.A_mul_B!(dUdt::AbstractFTField{n},
-                      lks::LinearTerm{n},
+                      imTerm::LinearTerm{n},
                       U::AbstractFTField{n}) where {n} =
     (_set_symmetry!(U);
      @inbounds for k in wavenumbers(n)
-         dUdt[k] = lks.A[k] * U[k]
+         dUdt[k] = imTerm.A[k] * U[k]
      end; dUdt)
 
-@inline Flows.ImcA!(lks::LinearTerm{n},
+@inline Flows.ImcA!(imTerm::LinearTerm{n},
                     c::Real,
                     U::AbstractFTField{n},
                     dUdt::AbstractFTField{n}) where {n} =
     (_set_symmetry!(U);
      @inbounds for k in wavenumbers(n)
-          dUdt[k] = U[k]/(1 - c*lks.A[k])
+          dUdt[k] = U[k]/(1 - c*imTerm.A[k])
      end; dUdt)
 
 
@@ -70,18 +70,18 @@ end
 NonLinearExTerm(n::Int, ISODD::Bool) = NonLinearExTerm{n}(ISODD)
 
 @inline function
-    (nlks::NonLinearExTerm{n, FT})(t::Real,
+    (exTerm::NonLinearExTerm{n, FT})(t::Real,
                                    U::FT,
                                    dUdt::FT,
                                    add::Bool=false) where {n, FT}
     _set_symmetry!(U)
-    nlks.ifft(U, nlks.u)        # copy and inverse transform
-    nlks.u .= nlks.u.^2         # square
-    nlks.fft(nlks.u, nlks.V)    # forward transform
-    ddx!(nlks.V)                # differentiate
+    exTerm.ifft(U, exTerm.u)        # copy and inverse transform
+    exTerm.u .= exTerm.u.^2         # square
+    exTerm.fft(exTerm.u, exTerm.V)  # forward transform
+    ddx!(exTerm.V)                  # differentiate
 
     # store and enforce symmetries
-    add == true ? (dUdt .+= 0.5.*nlks.V) : (dUdt .= 0.5.*nlks.V)
+    add == true ? (dUdt .+= 0.5.*exTerm.V) : (dUdt .= 0.5.*exTerm.V)
 
     return dUdt
 end
@@ -92,13 +92,13 @@ struct ForwardEquation{n,
                        G<:AbstractForcing{n},
                        LIN<:LinearTerm{n},
                        NLIN<:NonLinearExTerm{n}}
-                   lks::LIN
-                  nlks::NLIN
+                   imTerm::LIN
+                  exTerm::NLIN
                forcing::G
     function ForwardEquation{n}(ν::Real, ISODD::Bool, forcing::G) where {n, G}
-        nlks = NonLinearExTerm(n, ISODD)
-        lks  = LinearTerm(n, ν, ISODD, ForwardMode())
-        new{n, typeof(forcing), typeof(lks), typeof(nlks)}(lks, nlks, forcing)
+        exTerm = NonLinearExTerm(n, ISODD)
+        imTerm  = LinearTerm(n, ν, ISODD, ForwardMode())
+        new{n, typeof(forcing), typeof(imTerm), typeof(exTerm)}(imTerm, exTerm, forcing)
     end
 end
 
@@ -109,16 +109,16 @@ ForwardEquation(n::Int,
                                            ForwardEquation{n}(ν, ISODD, forcing)
 
 # split into implicit and explicit terms
-function splitexim(ks::ForwardEquation{n}) where {n}
+function splitexim(eq::ForwardEquation{n}) where {n}
     wrapper(t::Real, U::AbstractFTField{n}, dUdt::AbstractFTField{n}) =
-        (ks.nlks(t, U, dUdt, false); ks.forcing(t, U, dUdt); dUdt)
-    return wrapper, ks.lks
+        (eq.exTerm(t, U, dUdt, false); eq.forcing(t, U, dUdt); dUdt)
+    return wrapper, eq.imTerm
 end
 
 # evaluate right hand side of equation
-(ks::ForwardEquation{n})(t::Real,
+(eq::ForwardEquation{n})(t::Real,
                          U::FT,
-                         dUdt::FT) where {n, FT<:AbstractFTField{n}} =
-    (A_mul_B!(dUdt, ks.lks, U);
-     ks.nlks(t, U, dUdt, true);
-     ks.forcing(t, U, dUdt); dUdt)
+                         dUdt::FT) where {n, FT} =
+    (A_mul_B!(dUdt, eq.imTerm, U);
+     eq.exTerm(t, U, dUdt, true);
+     eq.forcing(t, U, dUdt); dUdt)
