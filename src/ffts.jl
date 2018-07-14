@@ -2,10 +2,11 @@
 # Copyright 2017-18, Davide Lasagna, AFM, University of Southampton #
 # ----------------------------------------------------------------- #
 
-import FFTW
+import Base.FFTW
 
 export ForwardFFT, 
-       InverseFFT
+       InverseFFT,
+       IFFT
 
 
 # //// UTILS //////
@@ -42,3 +43,12 @@ end
 # ////// callable interface //////
 @inline (f::InverseFFT{n})(U::FTField{n}, u::Field{n}) where {n} =
     (_fix_FFT!(U); FFTW.unsafe_execute!(f.plan, U.data, u.data); u)
+
+
+# ~~~ ALLOCATING VERSIONS ~~~
+
+function IFFT(U::FTField{n, ISODD, T}) where {n, ISODD, T}
+    V = copy(U)
+    fun = InverseFFT(V); V .= U
+    return fun(V, Field(n, T))
+end
