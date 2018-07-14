@@ -4,7 +4,9 @@
 import Flows
 
 export ForwardEquation,
-       splitexim
+       splitexim,
+       TangentMode,
+       AdjointMode
 
 # This triggers a different evaluation of the linearised 
 # operator, but the required software infrastructure is 
