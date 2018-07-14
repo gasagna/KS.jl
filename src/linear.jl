@@ -31,26 +31,39 @@ function (lks::LinearisedExTerm{n, M})(t::Real,
                                        dVdt::FTField{n},
                                        add::Bool=false) where {n, M}
 
-    # /// calculate - v * uₓ term ///
-    lks.ifft(V, lks.tmp1)               # transform V to physical space
-    ddx!(lks.TMP1, U)                   # differentiate U
-    lks.ifft(lks.TMP1, lks.tmp2)        # transform to physical space
-    lks.tmp3 .= .- lks.tmp1 .* lks.tmp2 # multiply in physical space
-    lks.fft(lks.tmp3, lks.TMP1)
-
-    # /// calculate - u * vₓ or + (u*v)ₓ term ///
     if M <: TangentMode
+        # /// calculate - v * uₓ term ///
+        lks.ifft(V, lks.tmp1)               # transform V to physical space
+        ddx!(lks.TMP1, U)                   # differentiate U
+        lks.ifft(lks.TMP1, lks.tmp2)        # transform Uₓ to physical space
+        lks.tmp3 .= .- lks.tmp1 .* lks.tmp2 # multiply in physical space
+
+        # /// calculate - u * vₓ term ///
         lks.ifft(U, lks.tmp1)               # transform U to physical space
         ddx!(lks.TMP2, V)                   # differentiate V
-        lks.ifft(lks.TMP2, lks.tmp2)        # transform Vto physical space
-        lks.tmp3 .= .- lks.tmp1 .* lks.tmp2 # multiply
+        lks.ifft(lks.TMP2, lks.tmp2)        # transform V to physical space
+        lks.tmp3 .-= lks.tmp1 .* lks.tmp2   # multiply
+
+        # transform sum to fourier space
+        lks.fft(lks.tmp3, lks.TMP2)
     end
+
     if M <: AdjointMode
-        lks.ifft(U, lks.tmp1)              # transform U to physical space
-        lks.ifft(V, lks.tmp2)              # transform V to physical space
-        lks.tmp1 .= lks.tmp1 .* lks.tmp2   # multiply, overwriting v
-        lks.fft(lks.tmp1, lks.TMP2)        # transform term to fourier space
-        ddx!(lks.TMP2)                     # differentiate term
+        # /// calculate + v * uₓ term ///
+        lks.ifft(V, lks.tmp1)               # transform V to physical space
+        ddx!(lks.TMP1, U)                   # differentiate U
+        lks.ifft(lks.TMP1, lks.tmp2)        # transform Uₓ to physical space
+        lks.tmp3 .= lks.tmp1 .* lks.tmp2    # multiply in physical space
+        lks.fft(lks.tmp3, lks.TMP1)         # transform product to fourier space
+
+        # /// calculate - (u*v)ₓ term ///
+        lks.ifft(U, lks.tmp2)               # transform U to physical space
+        lks.tmp2 .= .- lks.tmp1 .* lks.tmp2 # multiply in physical space
+        lks.fft(lks.tmp2, lks.TMP2)         # transform product to fourier space
+        ddx!(lks.TMP2)                      # differentiate in place
+
+        # sum the two terms
+        lks.TMP2 .+= lks.TMP1
     end
 
     # /// store and set symmetry ///
