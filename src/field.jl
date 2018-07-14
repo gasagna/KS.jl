@@ -24,7 +24,7 @@ end
 
 
 # ////// outer constructors /////
-Field(n::Int) = Field{n}(zeros(2*(n+1)))
+Field(n::Int, ::Type{T}=Float64) where{T} = Field{n}(zeros(T, 2*(n+1)))
 
 
 # ////// array interface //////
