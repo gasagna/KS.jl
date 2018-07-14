@@ -116,7 +116,7 @@ function splitexim(eq::LinearisedEquation{n}) where {n}
     function wrapper(t::Real, V::AbstractFTField{n}, dVdt::AbstractFTField{n})
         # interpolate U and evaluate nonlinear interaction term and forcing
         eq.mon(eq.TMP, t, Val{0}())
-        eq.exTerm(t, eq.TMP, V, dVdt, false)
+        eq.exTerm( t, eq.TMP, V, dVdt, false)
         eq.forcing(t, eq.TMP, V, dVdt)
 
         # interpolate dUdt if needed
@@ -127,5 +127,27 @@ function splitexim(eq::LinearisedEquation{n}) where {n}
 
         return dVdt
     end
+
+    # also allow passing U and dUdt directly
+    function wrapper(t::Real, U::AbstractFTField{n}, dUdt::AbstractFTField{n}, 
+                              V::AbstractFTField{n}, dVdt::AbstractFTField{n})
+        eq.exTerm( t, U, V, dVdt, false)
+        eq.forcing(t, U, V, dVdt)
+
+        # interpolate dUdt if needed
+        if eq.χ != 0
+            dVdt .+= eq.χ .* dUdT
+        end
+
+        return dVdt
+    end
+
     return wrapper, eq.imTerm
 end
+
+# evaluate right hand side of equation
+(eq::LinearisedEquation{n})(t::Real, U::FT, dUdt::FT, 
+                                     V::FT, dVdt::FT) where {n, FT} =
+    (A_mul_B!(dVdt, eq.imTerm, V); 
+        eq.exTerm(t, U, dUdt, V, dVdt, true); 
+            eq.forcing(t, U, dUdt); dUdt)
