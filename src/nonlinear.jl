@@ -6,7 +6,6 @@ import Flows
 export ForwardEquation,
        splitexim
 
-
 # This triggers a different evaluation of the linearised 
 # operator, but the required software infrastructure is 
 # the same in both cases.
@@ -20,11 +19,13 @@ struct AdjointMode <: AbstractLinearMode end
 # ////// LINEAR TERM //////
 struct LinearTerm{n, FT<:AbstractFTField{n}}
     A::FT
-    function LinearTerm{n}(ν::Real, ISODD::Bool, mode::AbstractMode) where {n}
+    function LinearTerm{n}(ν::Real, ISODD::Bool, mode::M) where {n, M<:AbstractMode}
         ν > 0 || throw(ArgumentError("viscosity must be positive"))
         A = FTField(n, ISODD)
+        # for the adjoint equation reverse the sign of the linear term
+        sgn = M <: AdjointMode ? -1 : 1
         for k in wavenumbers(n)
-            A[k] = k^2 - ν*k^4
+            A[k] = sgn*(k^2 - ν*k^4)
         end
         new{n, typeof(A)}(A)
     end
