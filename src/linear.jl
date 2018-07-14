@@ -113,10 +113,11 @@ end
 
 # obtain two components
 function splitexim(eq::LinearisedEquation{n}) where {n}
-    function wrapper(t::Real, V::AbstractFTField{n}, dVdt::AbstractFTField{n})
+    function wrapper(t::Real, V::AbstractFTField{n}, 
+                           dVdt::AbstractFTField{n}, add::Bool=false)
         # interpolate U and evaluate nonlinear interaction term and forcing
         eq.mon(eq.TMP, t, Val{0}())
-        eq.exTerm( t, eq.TMP, V, dVdt, false)
+        eq.exTerm( t, eq.TMP, V, dVdt, add)
         eq.forcing(t, eq.TMP, V, dVdt)
 
         # interpolate dUdt if needed
@@ -130,8 +131,9 @@ function splitexim(eq::LinearisedEquation{n}) where {n}
 
     # also allow passing U and dUdt directly
     function wrapper(t::Real, U::AbstractFTField{n}, dUdt::AbstractFTField{n}, 
-                              V::AbstractFTField{n}, dVdt::AbstractFTField{n})
-        eq.exTerm( t, U, V, dVdt, false)
+                              V::AbstractFTField{n}, dVdt::AbstractFTField{n},
+                              add::Bool=false)
+        eq.exTerm( t, U, V, dVdt, add)
         eq.forcing(t, U, V, dVdt)
 
         # interpolate dUdt if needed
@@ -149,5 +151,5 @@ end
 (eq::LinearisedEquation{n})(t::Real, U::FT, dUdt::FT, 
                                      V::FT, dVdt::FT) where {n, FT} =
     (A_mul_B!(dVdt, eq.imTerm, V); 
-        eq.exTerm(t, U, dUdt, V, dVdt, true); 
-            eq.forcing(t, U, dUdt); dUdt)
+        eq.exTerm(t, U, V, dVdt, true); 
+            eq.forcing(t, U, V, dVdt); dVdt)
