@@ -69,10 +69,9 @@ NonLinearExTerm(n::Int, ISODD::Bool) = NonLinearExTerm{n}(ISODD)
 
 @inline function
     (nlks::NonLinearExTerm{n, FT})(t::Real,
-                                 U::FT,
-                                 dUdt::FT,
-                                 add::Bool=false) where {n, 
-                                                         FT<:AbstractFTField{n}}
+                                   U::FT,
+                                   dUdt::FT,
+                                   add::Bool=false) where {n, FT}
     _set_symmetry!(U)
     nlks.ifft(U, nlks.u)        # copy and inverse transform
     nlks.u .= nlks.u.^2         # square
