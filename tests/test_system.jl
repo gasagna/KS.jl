@@ -1,5 +1,5 @@
 @testset "system                                 " begin
-    F = KSEq(2, 1.0, false)
+    F = ForwardEquation(2, 1.0, false)
     N, L = splitexim(F)
     U  = FTField(2, false)
     U[WaveNumber(1)] = 0.5+im*0.1

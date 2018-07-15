@@ -2,7 +2,7 @@ using Base.Test
 using KS
 using Flows
 
-@testset "test adjoint identities" begin
+@testset "test adjoint identities                " begin
     # parameters
     ν        = (2π/100)^2
     Δt       = 0.01*ν
@@ -60,50 +60,64 @@ using Flows
     end
 end
 
-# @testset "perturbations to u(x) = 0 decays exponentially" begin
+@testset "perturbations to the trivial base      " begin
 
-#     # parameters
-#     Δt       = 1e-2
-#     Δt       = 1e-2
-#     T        = 1
-#     rkmethod = :CB4_4R3R
-#     ISODD    = false
-#     n        = 15
-#     L        = 10
-#     c        = 0.0
+    # parameters
+    ν        = (2π/10)^2
+    Δt       = 0.01*ν
+    T        = 1*ν
+    rkmethod = :CB4_4R3R
+    ISODD    = false
+    n        = 15
 
-#     # system right hand side
-#     f = KSEq(n, L, c, ISODD)
+    # system right hand side
+    F = ForwardEquation(n, ν, ISODD)
 
-#     # integrator
-#     ϕ = integrator(splitexim(f)..., Scheme(rkmethod, FTField(n, L, ISODD)), Δt)
+    # integrator
+    ϕ = integrator(splitexim(F)..., 
+                   Scheme(rkmethod, FTField(n, ISODD)), TimeStepConstant(Δt))
 
-#     # monitor to store the forward solution
-#     sol = Monitor(FTField(n, L, ISODD), copy)
+    # monitor to store the forward solution
+    sol = Monitor(FTField(n, ISODD), copy)
 
-#     # random initial condition
-#     U = FTField(n, L, ISODD);
+    # random initial condition
+    U = FTField(n, ISODD, k->0)
 
-#     # store forward solution
-#     ϕ(U, (0, T), reset!(sol));
+    # now store forward solution
+    ϕ(U, (0, T), reset!(sol))
 
-#     # rhs
-#     lf = LinearisedKSEq(n, L, c, ISODD, sol)
+    # define linearised operator
+    L  = LinearisedEquation(n, ν, ISODD, KS.TangentMode(), sol)
+    L⁺ = LinearisedEquation(n, ν, ISODD, KS.AdjointMode(), sol)
 
-#     # integrator
-#     ψ = integrator(splitexim(lf)..., Scheme(rkmethod, FTField(n, L, ISODD)), Δt)
+    # and the integrators
+    ψ  = integrator(splitexim(L)...,
+                    Scheme(rkmethod, FTField(n, ISODD)), TimeStepConstant(Δt))
+    ψ⁺ = integrator(splitexim(L⁺)...,
+                    Scheme(rkmethod, FTField(n, ISODD)), TimeStepConstant(Δt))
 
-#     # will use this field
-#     V = FTField(n, L, ISODD)
+    # will use this field
+    V = FTField(n, ISODD)
 
-#     for k = wavenumbers(n)
-#         # set initial condition to be proportional to cos(2π/L⋅k⋅x)
-#         V .= 0; V[k] = 1
+    for k = wavenumbers(n)
+        # TANGENT
+        # set initial condition to be proportional to cos(2π/L⋅k⋅x)
+        V .= 0; V[k] = 1
     
-#         # propagate tangent problem
-#         ψ(V, (0, T))
+        # propagate tangent problem
+        ψ(V, (0, T))
 
-#         # check match with exact solution
-#         @test abs(V[k] - exp( T*((2π/L*k)^2 - (2π/L*k)^4) )) < 1e-10
-#     end
-# end
+        # check match with exact solution
+        @test abs(V[k] - exp( T*(k^2 - ν*k^4) )) < 1e-10
+        
+        # ADJOINT
+        # set terminal condition to be proportional to cos(2π/L⋅k⋅x)
+        V .= 0; V[k] = 1
+    
+        # propagate adjoint problem
+        ψ⁺(V, (T, 0))
+
+        # check match with exact solution
+        @test abs(V[k] - exp(T*(k^2 - ν*k^4) )) < 1e-10
+    end
+end
