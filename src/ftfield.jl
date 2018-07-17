@@ -2,6 +2,8 @@
 # Copyright 2017-18, Davide Lasagna, AFM, University of Southampton #
 # ----------------------------------------------------------------- #
 
+import LinearAlgebra
+
 export AbstractFTField,
        wavenumber,
        FTField,
@@ -131,10 +133,10 @@ Base.copy(U::FTField) = (V = similar(U); V .= U; V)
 
 
 # ////// inner product and norm //////
-Base.dot(U::FTField{n}, V::FTField{n}) where {n} =
+LinearAlgebra.dot(U::FTField{n}, V::FTField{n}) where {n} =
     2*real(sum(U[k]*conj(V[k]) for k in wavenumbers(n)))
 
-Base.norm(U::FTField) = sqrt(dot(U, U))
+LinearAlgebra.norm(U::FTField) = sqrt(dot(U, U))
 
 # ////// squared norm of the difference //////
 dotdiff(U::FTField{n}, V::FTField{n}) where {n} =

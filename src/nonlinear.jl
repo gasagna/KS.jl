@@ -36,9 +36,9 @@ LinearTerm(n::Int, ν::Real, ISODD::Bool, mode::AbstractMode) =
     LinearTerm{n}(ν, ISODD, mode)
 
 # obey Flows interface
-@inline Base.A_mul_B!(dUdt::AbstractFTField{n},
-                      imTerm::LinearTerm{n},
-                      U::AbstractFTField{n}) where {n} =
+@inline LinearAlgebra.mul!(dUdt::AbstractFTField{n},
+                           imTerm::LinearTerm{n},
+                           U::AbstractFTField{n}) where {n} =
     (_set_symmetry!(U);
      @inbounds for k in wavenumbers(n)
          dUdt[k] = imTerm.A[k] * U[k]
