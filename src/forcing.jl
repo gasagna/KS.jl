@@ -25,7 +25,6 @@ DummyForcing(n::Int) = DummyForcing{n}()
 struct SteadyForcing{n, FT<:AbstractFTField{n}} <: AbstractForcing{n}
     H::FT
 end
-SteadyForcing(H::AbstractFTField{n}) where {n} = SteadyForcing{n, typeof(H)}(H)
 
 # allow indexing this object
 Base.getindex(sf::SteadyForcing, i::Int) = sf.H[i]
