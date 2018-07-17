@@ -150,6 +150,6 @@ end
 # evaluate right hand side of equation
 (eq::LinearisedEquation{n})(t::Real, U::FT, dUdt::FT, 
                                      V::FT, dVdt::FT) where {n, FT} =
-    (A_mul_B!(dVdt, eq.imTerm, V); 
+    (mul!(dVdt, eq.imTerm, V); 
         eq.exTerm(t, U, V, dVdt, true); 
             eq.forcing(t, U, V, dVdt); dVdt)

@@ -1,4 +1,6 @@
-using Base.Test
+using Random
+using LinearAlgebra
+using Test
 using KS
 using Flows
 

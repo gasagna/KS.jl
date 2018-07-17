@@ -1,7 +1,3 @@
-using Base.Test
-using KS
-using Flows
-
 @testset "test adjoint identities                " begin
     # parameters
     ν        = (2π/100)^2

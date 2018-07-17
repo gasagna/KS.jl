@@ -119,6 +119,6 @@ end
 (eq::ForwardEquation{n})(t::Real,
                          U::FT,
                          dUdt::FT) where {n, FT} =
-    (A_mul_B!(dUdt, eq.imTerm, U);
+    (mul!(dUdt, eq.imTerm, U);
      eq.exTerm(t, U, dUdt, true);
      eq.forcing(t, U, dUdt); dUdt)

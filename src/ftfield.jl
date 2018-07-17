@@ -2,7 +2,7 @@
 # Copyright 2017-18, Davide Lasagna, AFM, University of Southampton #
 # ----------------------------------------------------------------- #
 
-import LinearAlgebra
+using LinearAlgebra
 
 export AbstractFTField,
        wavenumber,
@@ -58,21 +58,26 @@ struct FTField{n,
             throw(ArgumentError("inconsistent input")))
 
         # create data and view
-        dofs = vcat(zero(T), zero(T), _weave(input, Val{ISODD}()), zero(T), zero(T))
-        data = reinterpret(Complex{T}, dofs)
-        new{n, ISODD, T, typeof(data), typeof(dofs)}(data, dofs)
+        data = _write(zeros(Complex{T}, n+2), input, Val{ISODD}())
+        dptr = convert(Ptr{T}, pointer(data))
+        new{n, ISODD, T, typeof(data), typeof(dptr)}(data, dptr)
     end
 end
 
 # helper function to construct the array of degrees of freedom
-function _weave(x::AbstractVector, ::Val{true})
-    out = zeros(eltype(x), 2*length(x))
-    out[2:2:end] .= x
-    return out
+function _write(data::AbstractVector, input::AbstractVector, ::Val{true})
+    for i = 1:length(input)
+        data[i+1] = im*input[i]
+    end
+    return data
 end
 
-_weave(x::AbstractVector, ::Val{false}) = x
-
+function _write(data::AbstractVector, input::AbstractVector, ::Val{false})
+    for i = 1:length(data)-2
+        data[1 + i] = input[2i - 1] + im*input[2i]
+    end
+    return data
+end
 
 # ////// outer constructors //////
 FTField(n::Int, isodd::Bool, fun=k->0) =
