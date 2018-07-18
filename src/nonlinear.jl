@@ -81,7 +81,7 @@ NonLinearExTerm(n::Int, ISODD::Bool) = NonLinearExTerm{n}(ISODD)
     ddx!(exTerm.V)                  # differentiate
 
     # store and enforce symmetries
-    add == true ? (dUdt .+= 0.5.*exTerm.V) : (dUdt .= 0.5.*exTerm.V)
+    add == true ? (dUdt .-= 0.5.*exTerm.V) : (dUdt .= .-0.5.*exTerm.V)
 
     return dUdt
 end
