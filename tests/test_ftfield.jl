@@ -110,6 +110,17 @@ end
     end
 end
 
+@testset "shifts identities                      " begin
+    n, ISODD = 30, false
+    U = FTField(n, ISODD, k->exp(2π*im*rand())/k)
+    V = FTField(n, ISODD, k->exp(2π*im*rand())/k)
+
+    shouldbeU = shift!(shift!(copy(U), 1), -1)
+    @test sqrt(dotdiff(U, shouldbeU)) < 3e-16
+
+    @test dot(U, shift!(copy(V), 1)) == dot(shift!(copy(U), -1), V)
+end
+
 @testset "dot and norm                           " begin
     # cos(x)*cos(x)
     U = FTField(2, false); U[WaveNumber(1)] = 0.5
