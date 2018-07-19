@@ -11,5 +11,6 @@ include("ffts.jl")
 include("forcing.jl")
 include("nonlinear.jl")
 include("linear.jl")
+include("gradient.jl")
 
 end
