@@ -5,7 +5,8 @@
 export AbstractFTField,
        wavenumber,
        FTField,
-       ddx!
+       ddx!,
+       dotdiff
 
 # ////// ABSTRACT TYPE FOR SOLUTION IN FOURIER SPACE //////
 # n     : is the largest wave number that can be represented
@@ -132,14 +133,13 @@ Base.copy(U::FTField) = (V = similar(U); V .= U; V)
 
 # ////// inner product and norm //////
 Base.dot(U::FTField{n}, V::FTField{n}) where {n} =
-    2*real(sum(U[k]*conj(V[k]) for k in wavenumbers(n)))
+    real(sum(U[k]*conj(V[k]) for k in wavenumbers(n)))
 
 Base.norm(U::FTField) = sqrt(dot(U, U))
 
 # ////// squared norm of the difference //////
 dotdiff(U::FTField{n}, V::FTField{n}) where {n} =
-    2*real(sum(abs2(U[k] - V[k]) for k in wavenumbers(n)))
-
+    real(sum(abs2(U[k] - V[k]) for k in wavenumbers(n)))
 
 # ////// shifts and differentiation //////
 Base.shift!(U::AbstractFTField{n}, s::Real) where {n} =
