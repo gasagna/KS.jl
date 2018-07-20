@@ -86,6 +86,12 @@ function FTField(input::Vector{<:Real}, isodd::Bool)
                            FTField{N>>1, isodd}(input)
 end
 
+# allow constructing object from type specification
+function Base.convert(::Type{<:KS.FTField{n, ISODD}}, dofs::Array{<:Real, 1}) where {n, ISODD} 
+    @assert length(dofs) == 2n
+    return KS.FTField(dofs, ISODD)
+end
+
 
 # ////// Enforce symmetries, if needed //////
 _set_symmetry!(U::AbstractFTField{n,  true}) where {n} =
