@@ -88,7 +88,8 @@ end
 
 # allow constructing object from type specification
 function Base.convert(::Type{<:KS.FTField{n, ISODD}}, dofs::Array{<:Real, 1}) where {n, ISODD} 
-    @assert length(dofs) == 2n
+    flag = ISODD == false ? (length(dofs) == 2n) : length(dofs) == n
+    flag || throw(ArgumentError("inconsistent input"))
     return KS.FTField(dofs, ISODD)
 end
 
