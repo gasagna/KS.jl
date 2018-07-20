@@ -1,3 +1,5 @@
+import VectorPairs
+
 export LinearisedEquation,
        set_χ!
 
@@ -77,7 +79,7 @@ end
 mutable struct LinearisedEquation{n,
                                   IT<:LinearTerm{n},
                                   ET<:LinearisedExTerm{n},
-                                  G<:AbstractForcing{n},
+                                  G,
                                   M<:Flows.AbstractMonitor,
                                   FT<:AbstractFTField}
      imTerm::IT
@@ -88,6 +90,7 @@ mutable struct LinearisedEquation{n,
           χ::Float64
 end
 
+# TODO: remove this constant and make the FlowForcing modifiable
 # set χ constant
 set_χ!(eq::LinearisedEquation, χ::Real) = (eq.χ = χ; nothing)
 
@@ -98,7 +101,7 @@ function LinearisedEquation(n::Int,
                             mode::AbstractLinearMode,
                             mon::Flows.AbstractMonitor{T, X},
                             χ::Real=0,
-                            forcing::AbstractForcing=DummyForcing(n)) where {T, X}
+                            forcing=DummyForcing(n)) where {T, X}
     X <: FTField{n, ISODD} || error("invalid monitor object")
     imTerm = LinearTerm(n, ν, ISODD, mode)
     exTerm = LinearisedExTerm(n, ISODD, mode)
@@ -113,8 +116,10 @@ end
 
 # obtain two components
 function splitexim(eq::LinearisedEquation{n}) where {n}
-    function wrapper(t::Real, V::AbstractFTField{n}, 
-                           dVdt::AbstractFTField{n}, add::Bool=false)
+    function wrapper(t::Real, 
+                     V::AbstractFTField{n}, 
+                     dVdt::AbstractFTField{n}, 
+                     add::Bool=false)
         # interpolate U and evaluate nonlinear interaction term and forcing
         eq.mon(eq.TMP, t, Val{0}())
         eq.exTerm( t, eq.TMP, V, dVdt, add)
@@ -128,6 +133,31 @@ function splitexim(eq::LinearisedEquation{n}) where {n}
 
         return dVdt
     end
+
+    # allow integration of vector pairs
+    function wrapper(t::Real, 
+                     V::VectorPairs.VectorPair{T, FT}, 
+                     dVdt::VectorPairs.VectorPair{T, FT}, 
+                     add::Bool=false) where {n, T, FT<:AbstractFTField{n}}
+        # interpolate U and evaluate nonlinear interaction term and forcing
+        eq.mon(eq.TMP, t, Val{0}())
+
+        # forward call to both parts
+        eq.exTerm( t, eq.TMP, V.v1, dVdt.v1, add)
+        eq.exTerm( t, eq.TMP, V.v2, dVdt.v1, add)
+
+        # the is covered by a DualForcing in PeriodicShadowing
+        eq.forcing(t, eq.TMP, V, dVdt)
+
+        # interpolate dUdt if needed
+        if eq.χ != 0
+            eq.mon(eq.TMP, t, Val{1}())
+            dVdt .+= eq.χ .* eq.TMP
+        end
+
+        return dVdt
+    end
+
 
     # also allow passing U and dUdt directly
     function wrapper(t::Real, U::AbstractFTField{n}, dUdt::AbstractFTField{n}, 
@@ -148,8 +178,7 @@ function splitexim(eq::LinearisedEquation{n}) where {n}
 end
 
 # evaluate right hand side of equation
-(eq::LinearisedEquation{n})(t::Real, U::FT, dUdt::FT, 
-                                     V::FT, dVdt::FT) where {n, FT} =
+(eq::LinearisedEquation)(t::Real, U, dUdt, V, dVdt) =
     (A_mul_B!(dVdt, eq.imTerm, V); 
         eq.exTerm(t, U, V, dVdt, true); 
             eq.forcing(t, U, V, dVdt); dVdt)
