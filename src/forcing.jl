@@ -2,11 +2,10 @@
 # Copyright 2017-18, Davide Lasagna, AFM, University of Southampton #
 # ----------------------------------------------------------------- #
 
-export SensitivityWRTViscosity, SteadyForcing
-
-# ////// FORCING //////
-abstract type AbstractForcing{n} end
-
+export SensitivityWRTViscosity,
+       SteadyForcing,
+       DummyForcing,
+       FlowForcing
 
 # ////// DUMMY FORCING - DOES NOTHING //////
 struct DummyForcing{n} <: AbstractForcing{n} end
@@ -34,6 +33,27 @@ Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.H[i] = val)
 # add to dUdt by default
 @inline (sf::SteadyForcing{n, FT})(t::Real, U::FT, dUdt::FT) where {n, FT<:AbstractFTField{n}} =
     (dUdt .+= sf.H; return dUdt)
+
+
+# ////// FORCING ALONG f(x(T)) //////
+mutable struct FlowForcing{n, FEQ<:ForwardEquation{n}, FT<:FTField{n}} <: AbstractForcing{n} 
+      f::FEQ
+    TMP::FT
+      χ::Float64
+    FlowForcing(f::FEQ, TMP::FT) where {n, 
+                                        FEQ<:ForwardEquation{n}, 
+                                        FT<:FTField} = 
+        new{n, FEQ, FT}(f, TMP)
+
+end
+
+# constructors
+FlowForcing(f::ForwardEquation{n}, ISODD::Bool, χ::Real=1.0) where {n} = 
+    FlowForcing(f, FTField(n, ISODD))
+
+# obey callable interface
+(ff::FlowForcing{n})(t::Real, U::FT, V::FT, dVdt::FT) where {n, FT<:FTField{n}} =
+    (ff.f(t, U, ff.TMP); dVdt .+= ff.χ.*ff.TMP; dVdt)
 
 
 # ////// Sensitivity with respect to ν //////
