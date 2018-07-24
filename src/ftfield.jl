@@ -149,10 +149,14 @@ dotdiff(U::FTField{n}, V::FTField{n}) where {n} =
     real(sum(abs2(U[k] - V[k]) for k in wavenumbers(n)))
 
 # ////// shifts and differentiation //////
-Base.shift!(U::AbstractFTField{n}, s::Real) where {n} =
-    (@inbounds @simd for k in wavenumbers(n)
-         U[k] *= exp(im*s*k)
-     end; U)
+function Base.shift!(U::AbstractFTField{n}, s::Real) where {n}
+    if s != 0
+        @inbounds @simd for k in wavenumbers(n)
+            U[k] *= exp(im*s*k)
+        end
+    end
+    return U
+end
 
 # modify first argument
 ddx!(iKU::AbstractFTField{n}, U::AbstractFTField{n}) where {n} =
