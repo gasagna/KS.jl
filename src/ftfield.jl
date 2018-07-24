@@ -136,6 +136,7 @@ Base.checkbounds(U::AbstractFTField{n}, i::Int) where {n} =
 
 Base.similar(U::FTField{n, ISODD}) where {n, ISODD} = FTField(n, ISODD)
 Base.copy(U::FTField) = (V = similar(U); V .= U; V)
+Base.deepcopy(U::FTField) = copy(U)
 
 
 # ////// inner product and norm //////
