@@ -118,7 +118,7 @@ end
     shouldbeU = shift!(shift!(copy(U), 1), -1)
     @test sqrt(dotdiff(U, shouldbeU)) < 3e-16
 
-    @test dot(U, shift!(copy(V), 1)) == dot(shift!(copy(U), -1), V)
+    @test abs(dot(U, shift!(copy(V), 1)) - dot(shift!(copy(U), -1), V)) < 3e-16
 end
 
 @testset "dot and norm                           " begin
