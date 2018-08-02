@@ -5,9 +5,8 @@ using Flows
 @testset "test adjoint identities                " begin
     # parameters
     ν        = (2π/100)^2
-    Δt       = 1e-4*ν
+    Δt       = 0.1*ν
     T        = 100*ν
-    rkmethod = :CB3e_3R2R
     ISODD    = false
     n        = 100
 
@@ -17,47 +16,43 @@ using Flows
     # system right hand side
     F = ForwardEquation(n, ν, ISODD)
 
-    # integrator
-    ϕ = integrator(splitexim(F)..., 
-                   Scheme(rkmethod, FTField(n, ISODD)), TimeStepConstant(Δt))
+    # flow
+    ϕ = flow(splitexim(F)..., 
+             CB3R2R3e(FTField(n, ISODD), :NL), TimeStepConstant(Δt))
 
-    # monitor to store the forward solution
-    sol = Monitor(FTField(n, ISODD), copy)
+    # define the stage cache
+    cache = RAMStageCache(4, FTField(n, ISODD))
 
     # random initial condition
-    U = FTField(n, ISODD, k->exp(2π*im*rand())/k);
+    U = FTField(n, ISODD, k->exp(2π*im*rand())/k)
 
-    # now store forward solution
-    ϕ(U, (0, T), reset!(sol));
+    # proceed forward, then store forward solution for a small bit
+    ϕ(U, (0, T)); ϕ(U, (0, 100*ν), reset!(cache))
 
     # rhs
-    L  = LinearisedEquation(n, ν, ISODD, KS.TangentMode(), sol)
-    L⁺ = LinearisedEquation(n, ν, ISODD, KS.AdjointMode(), sol)
+    L  = LinearisedEquation(n, ν, ISODD, KS.TangentMode())
+    L⁺ = LinearisedEquation(n, ν, ISODD, KS.AdjointMode())
 
     # will use these random field for testing
     V  = FTField(n, ISODD, k->exp(2π*im*rand())/k)
     V⁺ = FTField(n, ISODD, k->exp(2π*im*rand())/k);
 
-    # test that ⟨V, ℒ⁺[V⁺]⟩ + ⟨V⁺, ℒ[V]⟩ = 0 to machine accuracy
-    v1 = dot(V,  L⁺(0, U, U, V⁺, FTField(n, ISODD)))
-    v2 = dot(V⁺, L( 0, U, U, V,  FTField(n, ISODD)))
+    # test that ⟨V, ℒ⁺[V⁺]⟩ = ⟨V⁺, ℒ[V]⟩ to machine accuracy
+    v1 = dot(V,  L⁺(0, U, V⁺, FTField(n, ISODD)))
+    v2 = dot(V⁺, L( 0, U, V,  FTField(n, ISODD)))
 
-    @test abs(v1+v2) < 2*eps(v1)*n
+    @test abs(v1-v2)/abs(v1) < 1e-14
 
     # test that the difference ⟨V, ψ⁺[V⁺]⟩ - ⟨V⁺, ψ[V]⟩
-    # goes to zero as we refine the time step, since
-    # the tangent and adjoint integrators are not
-    # discretely consistent with each other.
-    for Δt in ν.*logspace(-1, -4, 10)
-        # integrators
-        ψ  = integrator(splitexim(L)..., 
-                       Scheme(rkmethod, FTField(n, ISODD)), TimeStepConstant(Δt))
-        ψ⁺ = integrator(splitexim(L⁺)..., 
-                       Scheme(rkmethod, FTField(n, ISODD)), TimeStepConstant(Δt))
-        v1 = dot(V, ψ⁺(copy(V⁺), (100*ν, 99*ν)))
-        v2 = dot(V⁺, ψ(copy(V),  (99*ν, 100*ν)))
-        @test abs(v1-v2)/Δt^3 < 4.5*10^6
-    end
+    # goes to zero within machine accuracy
+    ψ  = flow(splitexim(L)..., 
+                   CB3R2R3e(FTField(n, ISODD), :TAN), TimeStepFromCache())
+    ψ⁺ = flow(splitexim(L⁺)..., 
+                   CB3R2R3e(FTField(n, ISODD), :ADJ), TimeStepFromCache())
+    v1 = dot(V, ψ⁺(copy(V⁺),cache))
+    v2 = dot(V⁺, ψ(copy(V), cache))
+    
+    @test abs(v1-v2)/abs(v1) < 5e-14
 end
 
 @testset "perturbations to the trivial base      " begin
@@ -66,35 +61,34 @@ end
     ν        = (2π/10)^2
     Δt       = 0.01*ν
     T        = 1*ν
-    rkmethod = :CB3e_3R2R
     ISODD    = false
     n        = 15
 
     # system right hand side
     F = ForwardEquation(n, ν, ISODD)
 
-    # integrator
-    ϕ = integrator(splitexim(F)..., 
-                   Scheme(rkmethod, FTField(n, ISODD)), TimeStepConstant(Δt))
+    # flow
+    ϕ = flow(splitexim(F)..., 
+                   CB3R2R3e(FTField(n, ISODD), :NL), TimeStepConstant(Δt))
 
-    # monitor to store the forward solution
-    sol = Monitor(FTField(n, ISODD), copy)
+    # define the stage cache
+    cache = RAMStageCache(4, FTField(n, ISODD))
 
-    # random initial condition
+    # zero initial condition
     U = FTField(n, ISODD, k->0)
 
     # now store forward solution
-    ϕ(U, (0, T), reset!(sol))
+    ϕ(U, (0, T), reset!(cache))
 
     # define linearised operator
-    L  = LinearisedEquation(n, ν, ISODD, KS.TangentMode(), sol)
-    L⁺ = LinearisedEquation(n, ν, ISODD, KS.AdjointMode(), sol)
+    L  = LinearisedEquation(n, ν, ISODD, KS.TangentMode())
+    L⁺ = LinearisedEquation(n, ν, ISODD, KS.AdjointMode())
 
-    # and the integrators
-    ψ  = integrator(splitexim(L)...,
-                    Scheme(rkmethod, FTField(n, ISODD)), TimeStepConstant(Δt))
-    ψ⁺ = integrator(splitexim(L⁺)...,
-                    Scheme(rkmethod, FTField(n, ISODD)), TimeStepConstant(Δt))
+    # and the flows
+    ψ  = flow(splitexim(L)...,
+                    CB3R2R3e(FTField(n, ISODD), :TAN), TimeStepFromCache())
+    ψ⁺ = flow(splitexim(L⁺)...,
+                    CB3R2R3e(FTField(n, ISODD), :ADJ), TimeStepFromCache())
 
     # will use this field
     V = FTField(n, ISODD)
@@ -105,7 +99,7 @@ end
         V .= 0; V[k] = 1
     
         # propagate tangent problem
-        ψ(V, (0, T))
+        ψ(V, cache)
 
         # check match with exact solution
         @test abs(V[k] - exp( T*(k^2 - ν*k^4) )) < 1e-7
@@ -115,7 +109,7 @@ end
         V .= 0; V[k] = 1
     
         # propagate adjoint problem
-        ψ⁺(V, (T, 0))
+        ψ⁺(V, cache)
 
         # check match with exact solution
         @test abs(V[k] - exp(T*(k^2 - ν*k^4) )) < 1e-7
@@ -127,7 +121,6 @@ end
     ν        = (2π/22)^2
     Δt       = 1e-1*ν
     T        = 1*ν
-    rkmethod = :CB3e_3R2R
     ISODD    = false
     n        = 22
 
@@ -137,28 +130,28 @@ end
     # system right hand side
     F = ForwardEquation(n, ν, ISODD)
 
-    # integrator
-    ϕ = integrator(splitexim(F)..., 
-                   Scheme(rkmethod, FTField(n, ISODD)), TimeStepConstant(Δt))
+    # flow
+    ϕ = flow(splitexim(F)..., 
+                   CB3R2R3e(FTField(n, ISODD), :NL), TimeStepConstant(Δt))
 
-    # monitor to store the forward solution
-    sol = Monitor(FTField(n, ISODD), copy)
+    # define the stage cache
+    cache = RAMStageCache(4, FTField(n, ISODD))
 
     # land on attractor
     U₀ = ϕ(FTField(n, ISODD, k->exp(2π*im*rand())/k), (0, 100*ν))
 
     # rhs
-    L  = LinearisedEquation(n, ν, ISODD, KS.TangentMode(), sol)
+    L  = LinearisedEquation(n, ν, ISODD, KS.TangentMode())
 
-    # integrators
-    ψ  = integrator(splitexim(L)..., 
-                   Scheme(rkmethod, FTField(n, ISODD)), TimeStepConstant(Δt))
+    # flows
+    ψ  = flow(splitexim(L)...,
+                    CB3R2R3e(FTField(n, ISODD), :TAN), TimeStepFromCache())
 
     # copy initial condition
-    _U₀ = copy(U₀); 
+    _U₀ = copy(U₀)
 
     # and get final point
-    Uₜ0 = ϕ(copy(_U₀), (0, T), reset!(sol))
+    Uₜ0 = ϕ(copy(_U₀), (0, T), reset!(cache))
 
     # copy initial condition and perturb it
     _U₀ = copy(U₀); _U₀[1] += 1e-6
@@ -170,7 +163,7 @@ end
     V  = FTField(n, ISODD, k->0); V[1] = 1
 
     # integrate direct equations, then apply shift
-    ψ(V, (0, T))
+    ψ(V, cache)
 
     # cannot demand too much from finite differences
     @test abs(V[1] - 1e6*(Uₜ1 - Uₜ0)[1]) < 3e-6
