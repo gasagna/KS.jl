@@ -50,21 +50,21 @@ function (lks::LinearisedExTerm{n, M})(t::Real,
     end
 
     if M <: AdjointMode
-        # /// calculate + v * uₓ term ///
+        # /// calculate - v * uₓ term ///
         lks.ifft(V, lks.tmp1)               # transform V to physical space
         ddx!(lks.TMP1, U)                   # differentiate U
         lks.ifft(lks.TMP1, lks.tmp2)        # transform Uₓ to physical space
         lks.tmp3 .= lks.tmp1 .* lks.tmp2    # multiply in physical space
         lks.fft(lks.tmp3, lks.TMP1)         # transform product to fourier space
 
-        # /// calculate - (u*v)ₓ term ///
+        # /// calculate + (u*v)ₓ term ///
         lks.ifft(U, lks.tmp2)               # transform U to physical space
-        lks.tmp2 .= .- lks.tmp1 .* lks.tmp2 # multiply in physical space
+        lks.tmp2 .= lks.tmp1 .* lks.tmp2    # multiply in physical space
         lks.fft(lks.tmp2, lks.TMP2)         # transform product to fourier space
         ddx!(lks.TMP2)                      # differentiate in place
 
         # sum the two terms
-        lks.TMP2 .+= lks.TMP1
+        lks.TMP2 .-= lks.TMP1
     end
 
     # /// store and set symmetry ///
