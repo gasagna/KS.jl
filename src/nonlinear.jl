@@ -31,27 +31,36 @@ struct LinearTerm{n, FT<:AbstractFTField{n}}
         new{n, typeof(A)}(A)
     end
 end
-LinearTerm(n::Int, ν::Real, ISODD::Bool, mode::AbstractMode) = 
-    LinearTerm{n}(ν, ISODD, mode)
 
-# obey Flows interface
-@inline Base.A_mul_B!(dUdt::AbstractFTField{n},
-                      imTerm::LinearTerm{n},
-                      U::AbstractFTField{n}) where {n} =
+LinearTerm(n::Int, ν::Real, ISODD::Bool) = LinearTerm{n}(ν, ISODD)
+
+# obey Flows interface. The operator is self-adjoint!
+Base.A_mul_B!(dUdt::AbstractFTField{n},
+            imTerm::LinearTerm{n},
+                 U::AbstractFTField{n}) where {n} =
     (_set_symmetry!(U);
      @inbounds for k in wavenumbers(n)
          dUdt[k] = imTerm.A[k] * U[k]
      end; dUdt)
 
+Base.At_mul_B!(dUdt::AbstractFTField{n},
+             imTerm::LinearTerm{n},
+                  U::AbstractFTField{n}) where {n} = A_mul_B!(dUdt, imTerm, U)
 
-@inline Flows.ImcA!(imTerm::LinearTerm{n},
-                    c::Real,
-                    U::AbstractFTField{n},
-                    dUdt::AbstractFTField{n}) where {n} =
+Flows.ImcA!(imTerm::LinearTerm{n},
+                 c::Real,
+                 U::AbstractFTField{n},
+              dUdt::AbstractFTField{n}) where {n} =
     (_set_symmetry!(U);
      @inbounds for k in wavenumbers(n)
           dUdt[k] = U[k]/(1 - c*imTerm.A[k])
      end; dUdt)
+
+Flows.ImcAt!(imTerm::LinearTerm{n},
+                  c::Real,
+                  U::AbstractFTField{n},
+               dUdt::AbstractFTField{n}) where {n} = 
+    Flows.ImcA!(imTerm, c, U, dUdt)
 
 # allow using a VectorPair
 @inline Base.A_mul_B!(dUdt::VectorPairs.VectorPair{T, FT},
@@ -114,8 +123,9 @@ struct ForwardEquation{n,
                forcing::G
     function ForwardEquation{n}(ν::Real, ISODD::Bool, forcing::G) where {n, G}
         exTerm = NonLinearExTerm(n, ISODD)
-        imTerm  = LinearTerm(n, ν, ISODD, ForwardMode())
-        new{n, typeof(forcing), typeof(imTerm), typeof(exTerm)}(imTerm, exTerm, forcing)
+        imTerm  = LinearTerm(n, ν, ISODD)
+        new{n, typeof(forcing), 
+            typeof(imTerm), typeof(exTerm)}(imTerm, exTerm, forcing)
     end
 end
 
