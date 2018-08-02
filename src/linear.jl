@@ -1,7 +1,6 @@
 import VectorPairs
 
-export LinearisedEquation,
-       set_χ!
+export LinearisedEquation
 
 # ////// LINEARISED EQUATION //////
 struct LinearisedExTerm{n, M<:AbstractLinearMode, FT<:FTField{n}, F<:Field{n}}
@@ -79,97 +78,53 @@ end
 mutable struct LinearisedEquation{n,
                                   IT<:LinearTerm{n},
                                   ET<:LinearisedExTerm{n},
-                                  G,
-                                  M<:Flows.AbstractMonitor,
-                                  FT<:AbstractFTField}
+                                  G}
      imTerm::IT
      exTerm::ET
     forcing::G
-        mon::M
-        TMP::FT
-          χ::Float64
 end
-
-# TODO: remove this constant and make the FlowForcing modifiable
-# set χ constant
-set_χ!(eq::LinearisedEquation, χ::Real) = (eq.χ = χ; nothing)
 
 # outer constructor: main entry point
 function LinearisedEquation(n::Int,
                             ν::Real,
                             ISODD::Bool,
                             mode::AbstractLinearMode,
-                            mon::Flows.AbstractMonitor{T, X},
-                            χ::Real=0,
-                            forcing=DummyForcing(n)) where {T, X}
-    X <: FTField{n, ISODD} || error("invalid monitor object")
-    imTerm = LinearTerm(n, ν, ISODD, mode)
+                            forcing=DummyForcing(n))
+    imTerm = LinearTerm(n, ν, ISODD)
     exTerm = LinearisedExTerm(n, ISODD, mode)
-    TMP = FTField(n, ISODD)
     LinearisedEquation{n,
                        typeof(imTerm),
                        typeof(exTerm),
-                       typeof(forcing),
-                       typeof(mon),
-                       typeof(TMP)}(imTerm, exTerm, forcing, mon, TMP, χ)
+                       typeof(forcing)}(imTerm, exTerm, forcing)
 end
 
 # obtain two components
 function splitexim(eq::LinearisedEquation{n}) where {n}
-    function wrapper(t::Real, 
+    
+    # integrate explicit part and forcing explicitly
+    function wrapper(t::Real,
+                     U::FTField{n}, 
                      V::AbstractFTField{n}, 
                      dVdt::AbstractFTField{n}, 
                      add::Bool=false)
-        # interpolate U and evaluate nonlinear interaction term and forcing
-        eq.mon(eq.TMP, t, Val{0}())
-        eq.exTerm( t, eq.TMP, V, dVdt, add)
-        eq.forcing(t, eq.TMP, V, dVdt)
-
-        # interpolate dUdt if needed
-        if eq.χ != 0
-            eq.mon(eq.TMP, t, Val{1}())
-            dVdt .+= eq.χ .* eq.TMP
-        end
-
+        eq.exTerm( t, U, V, dVdt, add)
+        eq.forcing(t, U, V, dVdt)
         return dVdt
     end
 
     # allow integration of vector pairs
     function wrapper(t::Real, 
+                     U::FTField{n}, 
                      V::VectorPairs.VectorPair{T, FT}, 
                      dVdt::VectorPairs.VectorPair{T, FT}, 
                      add::Bool=false) where {n, T, FT<:AbstractFTField{n}}
-        # interpolate U and evaluate nonlinear interaction term and forcing
-        eq.mon(eq.TMP, t, Val{0}())
 
         # forward call to both parts
-        eq.exTerm( t, eq.TMP, V.v1, dVdt.v1, add)
-        eq.exTerm( t, eq.TMP, V.v2, dVdt.v1, add)
+        eq.exTerm( t, U, V.v1, dVdt.v1, add)
+        eq.exTerm( t, U, V.v2, dVdt.v1, add)
 
         # the is covered by a DualForcing in PeriodicShadowing
-        eq.forcing(t, eq.TMP, V, dVdt)
-
-        # interpolate dUdt if needed
-        if eq.χ != 0
-            eq.mon(eq.TMP, t, Val{1}())
-            dVdt .+= eq.χ .* eq.TMP
-        end
-
-        return dVdt
-    end
-
-
-    # also allow passing U and dUdt directly
-    function wrapper(t::Real, U::AbstractFTField{n}, dUdt::AbstractFTField{n}, 
-                              V::AbstractFTField{n}, dVdt::AbstractFTField{n},
-                              add::Bool=false)
-        eq.exTerm( t, U, V, dVdt, add)
         eq.forcing(t, U, V, dVdt)
-
-        # interpolate dUdt if needed
-        if eq.χ != 0
-            dVdt .+= eq.χ .* dUdT
-        end
 
         return dVdt
     end
@@ -178,7 +133,7 @@ function splitexim(eq::LinearisedEquation{n}) where {n}
 end
 
 # evaluate right hand side of equation
-(eq::LinearisedEquation)(t::Real, U, dUdt, V, dVdt) =
+(eq::LinearisedEquation)(t::Real, U, V, dVdt) =
     (A_mul_B!(dVdt, eq.imTerm, V); 
         eq.exTerm(t, U, V, dVdt, true); 
             eq.forcing(t, U, V, dVdt); dVdt)
