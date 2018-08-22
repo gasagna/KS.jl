@@ -16,7 +16,7 @@ DummyForcing(n::Int) = DummyForcing{n}()
 (::DummyForcing{n})(t, U::FT, dUdt::FT) where {n, FT<:AbstractFTField{n}} = dUdt
 
 # and for the linear equation
-(::DummyForcing{n})(t, U::FT,
+(::DummyForcing{n})(t, U::FT, dUdt::FT,
                        V::FT, dVdt::FT) where {n, FT<:AbstractFTField{n}} = dVdt
 
 
@@ -36,24 +36,17 @@ Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.H[i] = val)
 
 
 # ////// FORCING ALONG f(x(T)) //////
-mutable struct FlowForcing{n, FEQ<:ForwardEquation{n}, FT<:FTField{n}} <: AbstractForcing{n} 
-      f::FEQ
-    TMP::FT
-      χ::Float64
-    FlowForcing(f::FEQ, TMP::FT) where {n, 
-                                        FEQ<:ForwardEquation{n}, 
-                                        FT<:FTField} = 
-        new{n, FEQ, FT}(f, TMP)
-
+mutable struct FlowForcing{n} <: AbstractForcing{n}
+    χ::Float64
 end
 
 # constructors
-FlowForcing(f::ForwardEquation{n}, ISODD::Bool, χ::Real=1.0) where {n} = 
-    FlowForcing(f, FTField(n, ISODD))
+FlowForcing(n::Int, χ::Real=1.0) = FlowForcing{n}(χ)
 
 # obey callable interface
-(ff::FlowForcing{n})(t::Real, U::FT, V::FT, dVdt::FT) where {n, FT<:FTField{n}} =
-    (ff.f(t, U, ff.TMP); dVdt .+= ff.χ.*ff.TMP; dVdt)
+(ff::FlowForcing{n})(t::Real, U::FT, dUdt::FT,
+                              V::FT, dVdt::FT) where {n, FT<:FTField{n}} =
+    (dVdt .+= ff.χ.*dUdt; dVdt)
 
 
 # ////// Sensitivity with respect to ν //////
@@ -65,6 +58,7 @@ SensitivityWRTViscosity(n::Int) = SensitivityWRTViscosity{n}()
 # obey callable interface
 (::SensitivityWRTViscosity{n})(t::Real,
                                U::FT,
+                            dUdt::FT,
                                V::FT,
                                dVdt::FT) where {n, FT<:FTField{n}} =
     (@inbounds @simd for k in wavenumbers(n);

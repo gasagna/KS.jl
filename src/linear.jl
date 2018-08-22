@@ -103,12 +103,13 @@ function splitexim(eq::LinearisedEquation{n}) where {n}
     
     # integrate explicit part and forcing explicitly
     function wrapper(t::Real,
-                     U::FTField{n}, 
-                     V::AbstractFTField{n}, 
-                     dVdt::AbstractFTField{n}, 
+                     U::FTField{n},
+                     dUdt::FTField{n},
+                     V::AbstractFTField{n},
+                     dVdt::AbstractFTField{n},
                      add::Bool=false)
         eq.exTerm( t, U, V, dVdt, add)
-        eq.forcing(t, U, V, dVdt)
+        eq.forcing(t, U, dUdt, V, dVdt)
         return dVdt
     end
 
@@ -133,7 +134,7 @@ function splitexim(eq::LinearisedEquation{n}) where {n}
 end
 
 # evaluate right hand side of equation
-(eq::LinearisedEquation)(t::Real, U, V, dVdt) =
+(eq::LinearisedEquation)(t::Real, U, dUdt, V, dVdt) =
     (A_mul_B!(dVdt, eq.imTerm, V); 
         eq.exTerm(t, U, V, dVdt, true); 
-            eq.forcing(t, U, V, dVdt); dVdt)
+            eq.forcing(t, U, dUdt, V, dVdt); dVdt)
