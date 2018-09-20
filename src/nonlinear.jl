@@ -43,10 +43,6 @@ Base.A_mul_B!(dUdt::AbstractFTField{n},
          dUdt[k] = imTerm.A[k] * U[k]
      end; dUdt)
 
-Base.At_mul_B!(dUdt::AbstractFTField{n},
-             imTerm::LinearTerm{n},
-                  U::AbstractFTField{n}) where {n} = A_mul_B!(dUdt, imTerm, U)
-
 Flows.ImcA!(imTerm::LinearTerm{n},
                  c::Real,
                  U::AbstractFTField{n},
@@ -55,29 +51,6 @@ Flows.ImcA!(imTerm::LinearTerm{n},
      @inbounds for k in wavenumbers(n)
           dUdt[k] = U[k]/(1 - c*imTerm.A[k])
      end; dUdt)
-
-Flows.ImcAt!(imTerm::LinearTerm{n},
-                  c::Real,
-                  U::AbstractFTField{n},
-               dUdt::AbstractFTField{n}) where {n} = 
-    Flows.ImcA!(imTerm, c, U, dUdt)
-
-# allow using a VectorPair
-@inline Base.A_mul_B!(dUdt::VectorPairs.VectorPair{T, FT},
-                      imTerm::LinearTerm{n},
-                      U::VectorPairs.VectorPair{T, FT}) where {n, 
-                                                    T, FT<:AbstractFTField{n}} =
-  (A_mul_B!(dUdt.v1, imTerm, U.v1);
-   A_mul_B!(dUdt.v2, imTerm, U.v2); dUdt)
-
-
-@inline Flows.ImcA!(imTerm::LinearTerm{n},
-                    c::Real,
-                    U::VectorPairs.VectorPair{T, FT},
-                    dUdt::VectorPairs.VectorPair{T, FT}) where {n, 
-                                                    T, FT<:AbstractFTField{n}} =
-    (Flows.ImcA!(imTerm, c, U.v1, dUdt.v1);
-     Flows.ImcA!(imTerm, c, U.v2, dUdt.v2); dUdt)
 
 
 # ////// NONLINEAR TERM //////
