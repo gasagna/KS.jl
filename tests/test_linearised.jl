@@ -18,7 +18,7 @@ using Flows
 
     # flow
     ϕ = flow(splitexim(F)..., 
-             CB3R2R3e(FTField(n, ISODD), :NL), TimeStepConstant(Δt))
+             CB3R2R3e(FTField(n, ISODD), :NORMAL), TimeStepConstant(Δt))
 
     # define the stage cache
     cache = RAMStageCache(4, FTField(n, ISODD))
@@ -69,7 +69,7 @@ end
 
     # flow
     ϕ = flow(splitexim(F)..., 
-                   CB3R2R3e(FTField(n, ISODD), :NL), TimeStepConstant(Δt))
+                   CB3R2R3e(FTField(n, ISODD), :NORMAL), TimeStepConstant(Δt))
 
     # define the stage cache
     cache = RAMStageCache(4, FTField(n, ISODD))
@@ -132,7 +132,7 @@ end
 
     # flow
     ϕ = flow(splitexim(F)..., 
-                   CB3R2R3e(FTField(n, ISODD), :NL), TimeStepConstant(Δt))
+                   CB3R2R3e(FTField(n, ISODD), :NORMAL), TimeStepConstant(Δt))
 
     # define the stage cache
     cache = RAMStageCache(4, FTField(n, ISODD))
