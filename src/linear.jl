@@ -1,5 +1,3 @@
-import VectorPairs
-
 export LinearisedEquation
 
 # ////// LINEARISED EQUATION //////
@@ -89,7 +87,7 @@ function LinearisedEquation(n::Int,
                             ν::Real,
                             ISODD::Bool,
                             mode::AbstractLinearMode,
-                            forcing=DummyForcing(n))
+                            forcing=nothing)
     imTerm = LinearTerm(n, ν, ISODD)
     exTerm = LinearisedExTerm(n, ISODD, mode)
     LinearisedEquation{n,
@@ -98,8 +96,13 @@ function LinearisedEquation(n::Int,
                        typeof(forcing)}(imTerm, exTerm, forcing)
 end
 
-# obtain two components
-function splitexim(eq::LinearisedEquation{n}) where {n}
+
+# /// SPLIT EXPLICIT AND IMPLICIT PARTS /// 
+
+# If we have a forcing we have to integrate it explicitly, and we require passing the
+# time derivative of the main state too. This is because the linearised equations do 
+# depend on dUdt, but the forcing might.
+function splitexim(eq::LinearisedEquation{n, IT, ET, F}) where {n, IT, ET, F<:AbstractForcing}
     
     # integrate explicit part and forcing explicitly
     function wrapper(t::Real,
@@ -109,32 +112,28 @@ function splitexim(eq::LinearisedEquation{n}) where {n}
                      dVdt::AbstractFTField{n},
                      add::Bool=false)
         eq.exTerm( t, U, V, dVdt, add)
-        eq.forcing(t, U, dUdt, V, dVdt)
-        return dVdt
-    end
-
-    # allow integration of vector pairs
-    function wrapper(t::Real, 
-                     U::FTField{n}, 
-                     V::VectorPairs.VectorPair{T, FT}, 
-                     dVdt::VectorPairs.VectorPair{T, FT}, 
-                     add::Bool=false) where {n, T, FT<:AbstractFTField{n}}
-
-        # forward call to both parts
-        eq.exTerm( t, U, V.v1, dVdt.v1, add)
-        eq.exTerm( t, U, V.v2, dVdt.v1, add)
-
-        # the is covered by a DualForcing in PeriodicShadowing
-        eq.forcing(t, U, V, dVdt)
-
+        eq.forcing(t, U, dUdt, V, dVdt) # note forcing always adds to dVdt
         return dVdt
     end
 
     return wrapper, eq.imTerm
 end
 
-# evaluate right hand side of equation
-(eq::LinearisedEquation)(t::Real, U, dUdt, V, dVdt) =
+# If there is no forcing, things are much easier, and we just return the two fields. 
+# In this case, the explicit term does not depend on the time derivative of the main state.
+splitexim(eq::LinearisedEquation{n, IT, ET, Void}) where {n, IT, ET} =
+    (eq.exTerm, eq.imTerm)
+
+
+# /// EVALUATE RIGHT HAND SIDE OF LINEARISED EQUATION ///
+# Same here, if we have forcing we evaluate it, and we require passing dUdt too.
+(eq::LinearisedEquation{n, IT, ET, F})(t::Real, U, dUdt, V, dVdt) where {n, IT, ET, F<:AbstractForcing} =
     (A_mul_B!(dVdt, eq.imTerm, V); 
         eq.exTerm(t, U, V, dVdt, true); 
             eq.forcing(t, U, dUdt, V, dVdt); dVdt)
+
+(eq::LinearisedEquation{n, IT, ET, Void})(t::Real, U, V, dVdt) where {n, IT, ET} =
+    (
+        # A_mul_B!(dVdt, eq.imTerm, V); 
+        eq.exTerm(t, U, V, dVdt, false); 
+        dVdt)            
