@@ -134,5 +134,5 @@ splitexim(eq::LinearisedEquation{n, IT, ET, Void}) where {n, IT, ET} =
 
 (eq::LinearisedEquation{n, IT, ET, Void})(t::Real, U, V, dVdt) where {n, IT, ET} =
     (A_mul_B!(dVdt, eq.imTerm, V); 
-        eq.exTerm(t, U, V, dVdt, false); 
+        eq.exTerm(t, U, V, dVdt, true); 
             return dVdt)            
