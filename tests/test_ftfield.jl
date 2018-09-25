@@ -1,3 +1,6 @@
+using Base.Test, KS
+
+
 @testset "constructors and indexing              " begin
     @testset "pass function to FTField           " begin
         U = FTField(2, true)
@@ -110,6 +113,16 @@ end
     end
 end
 
+@testset "derivative                             " begin
+    U = FTField(3, false); 
+    U[WaveNumber(1)] = 2.0 + im/1
+    U[WaveNumber(2)] = 3.0 + im/2
+    U[WaveNumber(3)] = 4.0 + im/3
+
+    V = ddx!(similar(U), U)
+    @test V == [-1, 2, -1, 6, -1, 12]
+end
+
 @testset "shifts identities                      " begin
     n, ISODD = 30, false
     U = FTField(n, ISODD, k->exp(2π*im*rand())/k)
@@ -122,10 +135,14 @@ end
 end
 
 @testset "dot and norm                           " begin
+    # we divide by two to be consistent with the fact that 
+    # our degrees of freedom do not include the `negative`
+    # wavenumbers. This becomes consistent with the dot
+    # product of the `linearised` array of degrees of freedom.
     # cos(x)*cos(x)
     U = FTField(2, false); U[WaveNumber(1)] = 0.5
-    @test dot(U, U) == 0.5
-    @test norm(U) == sqrt(0.5)
+    @test dot(U, U) == 0.5/2
+    @test norm(U) == sqrt(0.5/2)
 
     # cos(x)*sin(x)
     U = FTField(2, false); U[WaveNumber(1)] =  0.5
@@ -135,8 +152,8 @@ end
     # sin(2x)*sin(2x)
     U = FTField(2, true); U[WaveNumber(1)] = -0.5*im
     V = FTField(2, true); V[WaveNumber(1)] = -0.5*im
-    @test dot(U, U) == 0.5
-    @test norm(U) == sqrt(0.5)
+    @test dot(U, U) == 0.5/2
+    @test norm(U) == sqrt(0.5/2)
 end
 
 @testset "broadcast                              " begin
@@ -190,7 +207,7 @@ end
     end
 end
 
-@testset "deepcopy                                  " begin
+@testset "deepcopy                               " begin
     U = FTField([1, 2, 3, 4], false)
     V = deepcopy(U)
 
