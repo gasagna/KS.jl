@@ -133,6 +133,27 @@ splitexim(eq::LinearisedEquation{n, IT, ET, Void}) where {n, IT, ET} =
             eq.forcing(t, U, dUdt, V, dVdt); dVdt)
 
 (eq::LinearisedEquation{n, IT, ET, Void})(t::Real, U, V, dVdt) where {n, IT, ET} =
-    (A_mul_B!(dVdt, eq.imTerm, V); 
-        eq.exTerm(t, U, V, dVdt, true); 
-            return dVdt)            
+    (A_mul_B!(dVdt, eq.imTerm, V);
+        eq.exTerm(t, U, V, dVdt, true);
+            return dVdt)
+
+# Obtain jacobian matrix (only for systems with no forcing!)
+function (eq::LinearisedEquation{n, IT, ET, Void})(J::AbstractMatrix,
+                                                   U::FT,
+                                                tmp1::FT,
+                                                tmp2::FT) where {n, FT, IT,
+                                                                       ET, Void}
+    # set to zero initially, for safety
+    tmp1 .= 0
+    for i = 1:length(tmp1)
+        # perturb one component
+        tmp1[i] = 1
+        # apply linearised operator
+        eq(0, U, tmp1, tmp2)
+        # write to matrix
+        J[:, i] .= tmp2
+        # reset component to zero
+        tmp1[i] = 0
+    end
+    return J
+end
