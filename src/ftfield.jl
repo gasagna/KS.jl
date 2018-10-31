@@ -6,7 +6,8 @@ export AbstractFTField,
        wavenumber,
        FTField,
        ddx!,
-       dotdiff
+       dotdiff,
+       diffmat
 
 # ////// ABSTRACT TYPE FOR SOLUTION IN FOURIER SPACE //////
 # n     : is the largest wave number that can be represented
@@ -167,3 +168,22 @@ ddx!(iKU::AbstractFTField{n}, U::AbstractFTField{n}) where {n} =
 
 # in-place function
 ddx!(U::AbstractFTField) = ddx!(U, U)
+
+
+# CONSTRUCT DIFFERENTIATION MATRIX
+
+# little helper function to insert zeros into a vector
+function _add_zeros(x::AbstractVector)
+    out = zeros(eltype(x), 2*length(x) - 1)
+    for i = 1:length(x)
+        out[2i-1] = x[i]
+    end
+    return out
+end
+
+function diffmat(n::Int, ISODD::Bool, D::AbstractMatrix)
+    # check D has the right size
+    ISODD == false ||
+        throw(ArgumentError("only implemented for non odd fields"))
+    return spdiagm((-_add_zeros(1:n), _add_zeros(1:n)), (1, -1))
+end

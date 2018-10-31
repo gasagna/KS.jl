@@ -121,6 +121,15 @@ end
 
     V = ddx!(similar(U), U)
     @test V == [-1, 2, -1, 6, -1, 12]
+
+    # check differentiation matrix
+    D = diffmat(3, false, zeros(6, 6))
+    
+    # copy U to a vector
+    U_vec = zeros(length(U))
+    U_vec .= U
+    # then check with using ddx!
+    @test V == D*U_vec
 end
 
 @testset "shifts identities                      " begin
