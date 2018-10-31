@@ -4,7 +4,7 @@ import asis: tovector!,
 			 _checksize
 
 # IO functions for gradient calculations
-function tovector!(out::Vector, ∇ᵤJ::NTuple{N, FTField{n}}, ∇ₜJ::Real, ∇ₛJ::Real) where {N, n}
+function tovector!(out::Vector, ∇ᵤJ::NTuple{N, FTField{n}}, ∇ₜJ::Real, ∇sJ::Real) where {N, n}
     _checksize(out, ∇ᵤJ)
     idx = 1
     for i = 1:N
@@ -14,12 +14,12 @@ function tovector!(out::Vector, ∇ᵤJ::NTuple{N, FTField{n}}, ∇ₜJ::Real, �
         end
     end
     out[end-1] = ∇ₜJ
-    out[end]   = ∇ₛJ
+    out[end]   = ∇sJ
     return out
 end
 
-tovector(∇ᵤJ::NTuple{N, FTField{n}}, ∇ₜJ::Real, ∇ₛJ::Real) where {N, n} = 
-	tovector!(zeros(sum(length.(∇ᵤJ)) + 2), ∇ᵤJ, ∇ₜJ, ∇ₛJ)
+tovector(∇ᵤJ::NTuple{N, FTField{n}}, ∇ₜJ::Real, ∇sJ::Real) where {N, n} = 
+	tovector!(zeros(sum(length.(∇ᵤJ)) + 2), ∇ᵤJ, ∇ₜJ, ∇sJ)
 
 function fromvector!(∇ᵤJ::NTuple{N, FTField{n}}, out::Vector) where {N, n}
     _checksize(out, ∇ᵤJ)
