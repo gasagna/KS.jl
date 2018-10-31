@@ -70,9 +70,9 @@ NonLinearExTerm(n::Int, ISODD::Bool) = NonLinearExTerm{n}(ISODD)
 
 @inline function
     (exTerm::NonLinearExTerm{n, FT})(t::Real,
-                                   U::FT,
-                                   dUdt::FT,
-                                   add::Bool=false) where {n, FT}
+                                     U::FT,
+                                     dUdt::FT,
+                                     add::Bool=false) where {n, FT}
     _set_symmetry!(U)
     exTerm.ifft(U, exTerm.u)        # copy and inverse transform
     exTerm.u .= exTerm.u.^2         # square
@@ -96,7 +96,7 @@ struct ForwardEquation{n,
                forcing::G
     function ForwardEquation{n}(ν::Real, ISODD::Bool, forcing::G) where {n, G}
         exTerm = NonLinearExTerm(n, ISODD)
-        imTerm  = LinearTerm(n, ν, ISODD)
+        imTerm = LinearTerm(n, ν, ISODD)
         new{n, typeof(forcing), 
             typeof(imTerm), typeof(exTerm)}(imTerm, exTerm, forcing)
     end
