@@ -2,7 +2,6 @@
 # Copyright 2017-18, Davide Lasagna, AFM, University of Southampton #
 # ----------------------------------------------------------------- #
 import Flows
-import VectorPairs
 
 export ForwardEquation,
        splitexim,
