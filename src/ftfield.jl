@@ -32,11 +32,11 @@ struct FTField{n,
                ISODD,
                T,
                V<:AbstractVector{Complex{T}},
-               VL<:AbstractVector{T}} <: AbstractFTField{n, ISODD, T}
-    data::V    # the data as a complex array
-    dofs::VL   # linearised data for fast look-up of the degrees of freedom
-               # this is a essentially a view over data
-    # with complex input
+               P<:Ptr{T}} <: AbstractFTField{n, ISODD, T}
+    data::V   # the data as a complex array
+    dptr::P   # linearised data for fast look-up of the degrees of freedom
+              # this is a essentially a view over data
+               # with complex input
     function FTField{n, ISODD}(input::V) where {n,
                                                 ISODD,
                                                 T<:Real,
@@ -46,8 +46,8 @@ struct FTField{n,
 
         # create data and view
         data = vcat(zero(Complex{T}), input, zero(Complex{T}))
-        dofs = reinterpret(T, data)
-        new{n, ISODD, T, typeof(data), typeof(dofs)}(data, dofs)
+        dptr = convert(Ptr{T}, pointer(data))
+        new{n, ISODD, T, typeof(data), typeof(dptr)}(data, dptr)
     end
 
     # with real input
@@ -62,20 +62,26 @@ struct FTField{n,
             throw(ArgumentError("inconsistent input")))
 
         # create data and view
-        dofs = vcat(zero(T), zero(T), _weave(input, Val{ISODD}()), zero(T), zero(T))
-        data = reinterpret(Complex{T}, dofs)
-        new{n, ISODD, T, typeof(data), typeof(dofs)}(data, dofs)
+        data = _write(zeros(Complex{T}, n+2), input, Val{ISODD}())
+        dptr = convert(Ptr{T}, pointer(data))
+        new{n, ISODD, T, typeof(data), typeof(dptr)}(data, dptr)
     end
 end
 
 # helper function to construct the array of degrees of freedom
-function _weave(x::AbstractVector, ::Val{true})
-    out = zeros(eltype(x), 2*length(x))
-    out[2:2:end] .= x
-    return out
+function _write(data::AbstractVector, input::AbstractVector, ::Val{true})
+    for i = 1:length(input)
+        data[i+1] = im*input[i]
+    end
+    return data
 end
 
-_weave(x::AbstractVector, ::Val{false}) = x
+function _write(data::AbstractVector, input::AbstractVector, ::Val{false})
+    for i = 1:length(data)-2
+        data[1 + i] = input[2i - 1] + im*input[2i]
+    end
+    return data
+end
 
 
 # ////// outer constructors //////
@@ -114,21 +120,21 @@ Base.checkbounds(U::AbstractFTField{n}, k::WaveNumber) where {n} =
     (0 < k ≤ n || throw(BoundsError(U, k)); nothing)
 
 Base.checkbounds(U::AbstractFTField{n}, i::Int) where {n} =
-    (0 < i ≤ length(U) || throw(BoundsError(U.dofs, i)); nothing)
+    (0 < i ≤ length(U) || throw(BoundsError(U.dptr, i)); nothing)
 
 
 # indexing over the degrees of freedom
 @inline Base.getindex(U::FTField{n, false}, i::Int) where {n} =
-    (@boundscheck checkbounds(U, i); getindex(U.dofs, i+2))
+    (@boundscheck checkbounds(U, i); unsafe_load(U.dptr, i+2))
 
 @inline Base.setindex!(U::FTField{n, false}, val, i::Int) where {n} =
-    (@boundscheck checkbounds(U, i); setindex!(U.dofs, val, i+2))
+    (@boundscheck checkbounds(U, i); unsafe_store!(U.dptr, val, i+2))
 
 @inline Base.getindex(U::FTField{n, true}, i::Int) where {n} =
-    (@boundscheck checkbounds(U, i); getindex(U.dofs, 2i+2))
+    (@boundscheck checkbounds(U, i); unsafe_load(U.dptr, 2i+2))
 
 @inline Base.setindex!(U::FTField{n, true}, val, i::Int) where {n} =
-    (@boundscheck checkbounds(U, i); setindex!(U.dofs, val, 2i+2))
+    (@boundscheck checkbounds(U, i); unsafe_store!(U.dptr, val, 2i+2))
 
 # indexing over the wave numbers
 @inline Base.getindex(U::FTField, k::WaveNumber) =
