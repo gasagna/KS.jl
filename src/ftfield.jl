@@ -143,6 +143,9 @@ Base.similar(U::FTField{n, ISODD}) where {n, ISODD} = FTField(n, ISODD)
 Base.copy(U::FTField) = (V = similar(U); V .= U; V)
 Base.deepcopy(U::FTField) = copy(U)
 
+# see julia issue #28178
+Base.objectid(U::FTField) = objectid(U.data)
+
 
 # ////// inner product and norm //////
 dot(U::FTField{n}, V::FTField{n}) where {n} =
