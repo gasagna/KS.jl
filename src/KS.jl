@@ -16,7 +16,7 @@ include("field.jl")
 include("ffts.jl")
 include("nonlinear.jl")
 include("linear.jl")
-include("gradient.jl")
+# include("gradient.jl")
 include("forcing.jl")
 
 end

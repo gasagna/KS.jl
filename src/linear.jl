@@ -121,28 +121,28 @@ end
 
 # If there is no forcing, things are much easier, and we just return the two fields. 
 # In this case, the explicit term does not depend on the time derivative of the main state.
-splitexim(eq::LinearisedEquation{n, IT, ET, Void}) where {n, IT, ET} =
+splitexim(eq::LinearisedEquation{n, IT, ET, Nothing}) where {n, IT, ET} =
     (eq.exTerm, eq.imTerm)
 
 
 # /// EVALUATE RIGHT HAND SIDE OF LINEARISED EQUATION ///
 # Same here, if we have forcing we evaluate it, and we require passing dUdt too.
 (eq::LinearisedEquation{n, IT, ET, F})(t::Real, U, dUdt, V, dVdt) where {n, IT, ET, F<:AbstractForcing} =
-    (A_mul_B!(dVdt, eq.imTerm, V); 
+    (mul!(dVdt, eq.imTerm, V); 
         eq.exTerm(t, U, V, dVdt, true); 
             eq.forcing(t, U, dUdt, V, dVdt); dVdt)
 
-(eq::LinearisedEquation{n, IT, ET, Void})(t::Real, U, V, dVdt) where {n, IT, ET} =
-    (A_mul_B!(dVdt, eq.imTerm, V);
+(eq::LinearisedEquation{n, IT, ET, Nothing})(t::Real, U, V, dVdt) where {n, IT, ET} =
+    (mul!(dVdt, eq.imTerm, V);
         eq.exTerm(t, U, V, dVdt, true);
             return dVdt)
 
 # Obtain jacobian matrix (only for systems with no forcing!)
-function (eq::LinearisedEquation{n, IT, ET, Void})(J::AbstractMatrix,
+function (eq::LinearisedEquation{n, IT, ET, Nothing})(J::AbstractMatrix,
                                                    U::FT,
                                                 tmp1::FT,
                                                 tmp2::FT) where {n, FT, IT,
-                                                                       ET, Void}
+                                                                       ET, Nothing}
     # set to zero initially, for safety
     tmp1 .= 0
     for i = 1:length(tmp1)

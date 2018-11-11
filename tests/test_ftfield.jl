@@ -1,6 +1,3 @@
-using Base.Test, KS
-
-
 @testset "constructors and indexing              " begin
     @testset "pass function to FTField           " begin
         U = FTField(2, true)
@@ -133,6 +130,7 @@ end
 end
 
 @testset "shifts identities                      " begin
+    Random.seed!(0)
     n, ISODD = 30, false
     U = FTField(n, ISODD, k->exp(2π*im*rand())/k)
     V = FTField(n, ISODD, k->exp(2π*im*rand())/k)

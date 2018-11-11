@@ -7,7 +7,11 @@ export AbstractFTField,
        FTField,
        ddx!,
        dotdiff,
+       shift!,
        diffmat
+
+import LinearAlgebra: dot, norm
+import SparseArrays: spdiagm
 
 # ////// ABSTRACT TYPE FOR SOLUTION IN FOURIER SPACE //////
 # n     : is the largest wave number that can be represented
@@ -141,17 +145,17 @@ Base.deepcopy(U::FTField) = copy(U)
 
 
 # ////// inner product and norm //////
-Base.dot(U::FTField{n}, V::FTField{n}) where {n} =
+dot(U::FTField{n}, V::FTField{n}) where {n} =
     real(sum(U[k]*conj(V[k]) for k in wavenumbers(n)))
 
-Base.norm(U::FTField) = sqrt(dot(U, U))
+norm(U::FTField) = sqrt(dot(U, U))
 
 # ////// squared norm of the difference //////
 dotdiff(U::FTField{n}, V::FTField{n}) where {n} =
     real(sum(abs2(U[k] - V[k]) for k in wavenumbers(n)))
 
 # ////// shifts and differentiation //////
-function Base.shift!(U::AbstractFTField{n}, s::Real) where {n}
+function shift!(U::AbstractFTField{n}, s::Real) where {n}
     if s != 0
         @inbounds @simd for k in wavenumbers(n)
             U[k] *= exp(im*s*k)
@@ -185,5 +189,5 @@ function diffmat(n::Int, ISODD::Bool, D::AbstractMatrix)
     # check D has the right size
     ISODD == false ||
         throw(ArgumentError("only implemented for non odd fields"))
-    return spdiagm((-_add_zeros(1:n), _add_zeros(1:n)), (1, -1))
+    return spdiagm(1=>-_add_zeros(1:n), -1=>_add_zeros(1:n))
 end

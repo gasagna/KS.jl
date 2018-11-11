@@ -1,6 +1,3 @@
-using Base.Test
-using KS
-
 @testset "shift                                  " begin
     # cos(x)
     U = FTField(1, false); U[WaveNumber(1)] = 0.5

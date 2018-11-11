@@ -8,6 +8,8 @@ export ForwardEquation,
        TangentMode,
        AdjointMode
 
+import LinearAlgebra: mul!
+
 # This triggers a different evaluation of the linearised 
 # operator, but the required software infrastructure is 
 # the same in both cases.
@@ -34,9 +36,9 @@ end
 LinearTerm(n::Int, ν::Real, ISODD::Bool) = LinearTerm{n}(ν, ISODD)
 
 # obey Flows interface. The operator is self-adjoint!
-Base.A_mul_B!(dUdt::AbstractFTField{n},
-            imTerm::LinearTerm{n},
-                 U::AbstractFTField{n}) where {n} =
+mul!(dUdt::AbstractFTField{n},
+   imTerm::LinearTerm{n},
+        U::AbstractFTField{n}) where {n} =
     (_set_symmetry!(U);
      @inbounds for k in wavenumbers(n)
          dUdt[k] = imTerm.A[k] * U[k]
@@ -118,6 +120,6 @@ end
 (eq::ForwardEquation{n})(t::Real,
                          U::FT,
                          dUdt::FT) where {n, FT} =
-    (A_mul_B!(dUdt, eq.imTerm, U);
+    (mul!(dUdt, eq.imTerm, U);
      eq.exTerm(t, U, dUdt, true);
      eq.forcing(t, U, dUdt); dUdt)

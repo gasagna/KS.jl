@@ -1,8 +1,4 @@
-using Base.Test
-using KS
-using Flows
-
-@testset "test jacobians                " begin
+@testset "test jacobians                         " begin
     for n = [16, 32, 64, 128]
         for ISODD in (true, false)
             ν = 0.123456
@@ -44,7 +40,7 @@ end
     n        = 100
 
     # seed rng
-    srand(0)
+    Random.seed!(0)
 
     # system right hand side
     F = ForwardEquation(n, ν, ISODD)
@@ -158,7 +154,7 @@ end
     n        = 22
 
     # seed rng
-    srand(0)
+    Random.seed!(0)
 
     # system right hand side
     F = ForwardEquation(n, ν, ISODD)
