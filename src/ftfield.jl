@@ -7,7 +7,9 @@ using LinearAlgebra
 export AbstractFTField,
        wavenumber,
        FTField,
-       ddx!
+       ddx!,
+       dotdiff,
+       diffmat
 
 # ////// ABSTRACT TYPE FOR SOLUTION IN FOURIER SPACE //////
 # n     : is the largest wave number that can be represented
@@ -92,6 +94,13 @@ function FTField(input::Vector{<:Real}, isodd::Bool)
                            FTField{N>>1, isodd}(input)
 end
 
+# allow constructing object from type specification
+function Base.convert(::Type{<:KS.FTField{n, ISODD}}, dofs::Array{<:Real, 1}) where {n, ISODD} 
+    flag = ISODD == false ? (length(dofs) == 2n) : length(dofs) == n
+    flag || throw(ArgumentError("inconsistent input"))
+    return KS.FTField(dofs, ISODD)
+end
+
 
 # ////// Enforce symmetries, if needed //////
 _set_symmetry!(U::AbstractFTField{n,  true}) where {n} =
@@ -135,24 +144,28 @@ Base.checkbounds(U::AbstractFTField{n}, i::Int) where {n} =
 
 Base.similar(U::FTField{n, ISODD}) where {n, ISODD} = FTField(n, ISODD)
 Base.copy(U::FTField) = (V = similar(U); V .= U; V)
+Base.deepcopy(U::FTField) = copy(U)
 
 
 # ////// inner product and norm //////
-LinearAlgebra.dot(U::FTField{n}, V::FTField{n}) where {n} =
-    2*real(sum(U[k]*conj(V[k]) for k in wavenumbers(n)))
+Base.dot(U::FTField{n}, V::FTField{n}) where {n} =
+    real(sum(U[k]*conj(V[k]) for k in wavenumbers(n)))
 
 LinearAlgebra.norm(U::FTField) = sqrt(dot(U, U))
 
 # ////// squared norm of the difference //////
 dotdiff(U::FTField{n}, V::FTField{n}) where {n} =
-    2*real(sum(abs2(U[k] - V[k]) for k in wavenumbers(n)))
-
+    real(sum(abs2(U[k] - V[k]) for k in wavenumbers(n)))
 
 # ////// shifts and differentiation //////
-Base.shift!(U::AbstractFTField{n}, s::Real) where {n} =
-    (@inbounds @simd for k in wavenumbers(n)
-         U[k] *= exp(im*s*k)
-     end; U)
+function Base.shift!(U::AbstractFTField{n}, s::Real) where {n}
+    if s != 0
+        @inbounds @simd for k in wavenumbers(n)
+            U[k] *= exp(im*s*k)
+        end
+    end
+    return U
+end
 
 # modify first argument
 ddx!(iKU::AbstractFTField{n}, U::AbstractFTField{n}) where {n} =
@@ -162,3 +175,22 @@ ddx!(iKU::AbstractFTField{n}, U::AbstractFTField{n}) where {n} =
 
 # in-place function
 ddx!(U::AbstractFTField) = ddx!(U, U)
+
+
+# CONSTRUCT DIFFERENTIATION MATRIX
+
+# little helper function to insert zeros into a vector
+function _add_zeros(x::AbstractVector)
+    out = zeros(eltype(x), 2*length(x) - 1)
+    for i = 1:length(x)
+        out[2i-1] = x[i]
+    end
+    return out
+end
+
+function diffmat(n::Int, ISODD::Bool, D::AbstractMatrix)
+    # check D has the right size
+    ISODD == false ||
+        throw(ArgumentError("only implemented for non odd fields"))
+    return spdiagm((-_add_zeros(1:n), _add_zeros(1:n)), (1, -1))
+end

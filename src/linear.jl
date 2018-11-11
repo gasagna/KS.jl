@@ -1,5 +1,4 @@
-export LinearisedEquation,
-       set_χ!
+export LinearisedEquation
 
 # ////// LINEARISED EQUATION //////
 struct LinearisedExTerm{n, M<:AbstractLinearMode, FT<:FTField{n}, F<:Field{n}}
@@ -49,21 +48,21 @@ function (lks::LinearisedExTerm{n, M})(t::Real,
     end
 
     if M <: AdjointMode
-        # /// calculate + v * uₓ term ///
+        # /// calculate - v * uₓ term ///
         lks.ifft(V, lks.tmp1)               # transform V to physical space
         ddx!(lks.TMP1, U)                   # differentiate U
         lks.ifft(lks.TMP1, lks.tmp2)        # transform Uₓ to physical space
         lks.tmp3 .= lks.tmp1 .* lks.tmp2    # multiply in physical space
         lks.fft(lks.tmp3, lks.TMP1)         # transform product to fourier space
 
-        # /// calculate - (u*v)ₓ term ///
+        # /// calculate + (u*v)ₓ term ///
         lks.ifft(U, lks.tmp2)               # transform U to physical space
-        lks.tmp2 .= .- lks.tmp1 .* lks.tmp2 # multiply in physical space
+        lks.tmp2 .= lks.tmp1 .* lks.tmp2    # multiply in physical space
         lks.fft(lks.tmp2, lks.TMP2)         # transform product to fourier space
         ddx!(lks.TMP2)                      # differentiate in place
 
         # sum the two terms
-        lks.TMP2 .+= lks.TMP1
+        lks.TMP2 .-= lks.TMP1
     end
 
     # /// store and set symmetry ///
@@ -77,79 +76,84 @@ end
 mutable struct LinearisedEquation{n,
                                   IT<:LinearTerm{n},
                                   ET<:LinearisedExTerm{n},
-                                  G<:AbstractForcing{n},
-                                  M<:Flows.AbstractMonitor,
-                                  FT<:AbstractFTField}
+                                  G}
      imTerm::IT
      exTerm::ET
     forcing::G
-        mon::M
-        TMP::FT
-          χ::Float64
 end
-
-# set χ constant
-set_χ!(eq::LinearisedEquation, χ::Real) = (eq.χ = χ; nothing)
 
 # outer constructor: main entry point
 function LinearisedEquation(n::Int,
                             ν::Real,
                             ISODD::Bool,
                             mode::AbstractLinearMode,
-                            mon::Flows.AbstractMonitor{T, X},
-                            χ::Real=0,
-                            forcing::AbstractForcing=DummyForcing(n)) where {T, X}
-    X <: FTField{n, ISODD} || error("invalid monitor object")
-    imTerm = LinearTerm(n, ν, ISODD, mode)
+                            forcing=nothing)
+    imTerm = LinearTerm(n, ν, ISODD)
     exTerm = LinearisedExTerm(n, ISODD, mode)
-    TMP = FTField(n, ISODD)
     LinearisedEquation{n,
                        typeof(imTerm),
                        typeof(exTerm),
-                       typeof(forcing),
-                       typeof(mon),
-                       typeof(TMP)}(imTerm, exTerm, forcing, mon, TMP, χ)
+                       typeof(forcing)}(imTerm, exTerm, forcing)
 end
 
-# obtain two components
-function splitexim(eq::LinearisedEquation{n}) where {n}
-    function wrapper(t::Real, V::AbstractFTField{n}, 
-                           dVdt::AbstractFTField{n}, add::Bool=false)
-        # interpolate U and evaluate nonlinear interaction term and forcing
-        eq.mon(eq.TMP, t, Val{0}())
-        eq.exTerm( t, eq.TMP, V, dVdt, add)
-        eq.forcing(t, eq.TMP, V, dVdt)
 
-        # interpolate dUdt if needed
-        if eq.χ != 0
-            eq.mon(eq.TMP, t, Val{1}())
-            dVdt .+= eq.χ .* eq.TMP
-        end
+# /// SPLIT EXPLICIT AND IMPLICIT PARTS /// 
 
-        return dVdt
-    end
-
-    # also allow passing U and dUdt directly
-    function wrapper(t::Real, U::AbstractFTField{n}, dUdt::AbstractFTField{n}, 
-                              V::AbstractFTField{n}, dVdt::AbstractFTField{n},
-                              add::Bool=false)
+# If we have a forcing we have to integrate it explicitly, and we require passing the
+# time derivative of the main state too. This is because the linearised equations do 
+# depend on dUdt, but the forcing might.
+function splitexim(eq::LinearisedEquation{n, IT, ET, F}) where {n, IT, ET, F<:AbstractForcing}
+    
+    # integrate explicit part and forcing explicitly
+    function wrapper(t::Real,
+                     U::FTField{n},
+                     dUdt::FTField{n},
+                     V::AbstractFTField{n},
+                     dVdt::AbstractFTField{n},
+                     add::Bool=false)
         eq.exTerm( t, U, V, dVdt, add)
-        eq.forcing(t, U, V, dVdt)
-
-        # interpolate dUdt if needed
-        if eq.χ != 0
-            dVdt .+= eq.χ .* dUdT
-        end
-
+        eq.forcing(t, U, dUdt, V, dVdt) # note forcing always adds to dVdt
         return dVdt
     end
 
     return wrapper, eq.imTerm
 end
 
-# evaluate right hand side of equation
-(eq::LinearisedEquation{n})(t::Real, U::FT, dUdt::FT, 
-                                     V::FT, dVdt::FT) where {n, FT} =
-    (mul!(dVdt, eq.imTerm, V); 
+# If there is no forcing, things are much easier, and we just return the two fields. 
+# In this case, the explicit term does not depend on the time derivative of the main state.
+splitexim(eq::LinearisedEquation{n, IT, ET, Void}) where {n, IT, ET} =
+    (eq.exTerm, eq.imTerm)
+
+
+# /// EVALUATE RIGHT HAND SIDE OF LINEARISED EQUATION ///
+# Same here, if we have forcing we evaluate it, and we require passing dUdt too.
+(eq::LinearisedEquation{n, IT, ET, F})(t::Real, U, dUdt, V, dVdt) where {n, IT, ET, F<:AbstractForcing} =
+    (A_mul_B!(dVdt, eq.imTerm, V); 
         eq.exTerm(t, U, V, dVdt, true); 
-            eq.forcing(t, U, V, dVdt); dVdt)
+            eq.forcing(t, U, dUdt, V, dVdt); dVdt)
+
+(eq::LinearisedEquation{n, IT, ET, Void})(t::Real, U, V, dVdt) where {n, IT, ET} =
+    (A_mul_B!(dVdt, eq.imTerm, V);
+        eq.exTerm(t, U, V, dVdt, true);
+            return dVdt)
+
+# Obtain jacobian matrix (only for systems with no forcing!)
+function (eq::LinearisedEquation{n, IT, ET, Void})(J::AbstractMatrix,
+                                                   U::FT,
+                                                tmp1::FT,
+                                                tmp2::FT) where {n, FT, IT,
+                                                                       ET, Void}
+    # set to zero initially, for safety
+    tmp1 .= 0
+    for i = 1:length(tmp1)
+        # perturb one component
+        tmp1[i] = 1
+        # apply linearised operator
+        eq(0, U, tmp1, tmp2)
+        # write to matrix
+        J[:, i] .= tmp2
+        # reset component to zero
+        tmp1[i] = 0
+    end
+    return J
+end

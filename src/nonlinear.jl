@@ -21,33 +21,31 @@ struct AdjointMode <: AbstractLinearMode end
 # ////// LINEAR TERM //////
 struct LinearTerm{n, FT<:AbstractFTField{n}}
     A::FT
-    function LinearTerm{n}(ν::Real, ISODD::Bool, mode::M) where {n, M<:AbstractMode}
+    function LinearTerm{n}(ν::Real, ISODD::Bool) where {n}
         ν > 0 || throw(ArgumentError("viscosity must be positive"))
         A = FTField(n, ISODD)
-        # for the adjoint equation reverse the sign of the linear term
-        sgn = M <: AdjointMode ? -1 : 1
         for k in wavenumbers(n)
-            A[k] = sgn*(k^2 - ν*k^4)
+            A[k] = k^2 - ν*k^4
         end
         new{n, typeof(A)}(A)
     end
 end
-LinearTerm(n::Int, ν::Real, ISODD::Bool, mode::AbstractMode) = 
-    LinearTerm{n}(ν, ISODD, mode)
 
-# obey Flows interface
-@inline LinearAlgebra.mul!(dUdt::AbstractFTField{n},
-                           imTerm::LinearTerm{n},
-                           U::AbstractFTField{n}) where {n} =
+LinearTerm(n::Int, ν::Real, ISODD::Bool) = LinearTerm{n}(ν, ISODD)
+
+# obey Flows interface. The operator is self-adjoint!
+Base.A_mul_B!(dUdt::AbstractFTField{n},
+            imTerm::LinearTerm{n},
+                 U::AbstractFTField{n}) where {n} =
     (_set_symmetry!(U);
      @inbounds for k in wavenumbers(n)
          dUdt[k] = imTerm.A[k] * U[k]
      end; dUdt)
 
-@inline Flows.ImcA!(imTerm::LinearTerm{n},
-                    c::Real,
-                    U::AbstractFTField{n},
-                    dUdt::AbstractFTField{n}) where {n} =
+Flows.ImcA!(imTerm::LinearTerm{n},
+                 c::Real,
+                 U::AbstractFTField{n},
+              dUdt::AbstractFTField{n}) where {n} =
     (_set_symmetry!(U);
      @inbounds for k in wavenumbers(n)
           dUdt[k] = U[k]/(1 - c*imTerm.A[k])
@@ -71,9 +69,9 @@ NonLinearExTerm(n::Int, ISODD::Bool) = NonLinearExTerm{n}(ISODD)
 
 @inline function
     (exTerm::NonLinearExTerm{n, FT})(t::Real,
-                                   U::FT,
-                                   dUdt::FT,
-                                   add::Bool=false) where {n, FT}
+                                     U::FT,
+                                     dUdt::FT,
+                                     add::Bool=false) where {n, FT}
     _set_symmetry!(U)
     exTerm.ifft(U, exTerm.u)        # copy and inverse transform
     exTerm.u .= exTerm.u.^2         # square
@@ -81,7 +79,7 @@ NonLinearExTerm(n::Int, ISODD::Bool) = NonLinearExTerm{n}(ISODD)
     ddx!(exTerm.V)                  # differentiate
 
     # store and enforce symmetries
-    add == true ? (dUdt .+= 0.5.*exTerm.V) : (dUdt .= 0.5.*exTerm.V)
+    add == true ? (dUdt .-= 0.5.*exTerm.V) : (dUdt .= .-0.5.*exTerm.V)
 
     return dUdt
 end
@@ -97,8 +95,9 @@ struct ForwardEquation{n,
                forcing::G
     function ForwardEquation{n}(ν::Real, ISODD::Bool, forcing::G) where {n, G}
         exTerm = NonLinearExTerm(n, ISODD)
-        imTerm  = LinearTerm(n, ν, ISODD, ForwardMode())
-        new{n, typeof(forcing), typeof(imTerm), typeof(exTerm)}(imTerm, exTerm, forcing)
+        imTerm = LinearTerm(n, ν, ISODD)
+        new{n, typeof(forcing), 
+            typeof(imTerm), typeof(exTerm)}(imTerm, exTerm, forcing)
     end
 end
 

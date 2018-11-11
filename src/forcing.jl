@@ -2,11 +2,10 @@
 # Copyright 2017-18, Davide Lasagna, AFM, University of Southampton #
 # ----------------------------------------------------------------- #
 
-export SensitivityWRTViscosity, SteadyForcing
-
-# ////// FORCING //////
-abstract type AbstractForcing{n} end
-
+export SensitivityWRTViscosity,
+       SteadyForcing,
+       DummyForcing,
+       FlowForcing
 
 # ////// DUMMY FORCING - DOES NOTHING //////
 struct DummyForcing{n} <: AbstractForcing{n} end
@@ -17,7 +16,7 @@ DummyForcing(n::Int) = DummyForcing{n}()
 (::DummyForcing{n})(t, U::FT, dUdt::FT) where {n, FT<:AbstractFTField{n}} = dUdt
 
 # and for the linear equation
-(::DummyForcing{n})(t, U::FT,
+(::DummyForcing{n})(t, U::FT, dUdt::FT,
                        V::FT, dVdt::FT) where {n, FT<:AbstractFTField{n}} = dVdt
 
 
@@ -35,6 +34,20 @@ Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.H[i] = val)
     (dUdt .+= sf.H; return dUdt)
 
 
+# ////// FORCING ALONG f(x(T)) //////
+mutable struct FlowForcing{n} <: AbstractForcing{n}
+    χ::Float64
+end
+
+# constructors
+FlowForcing(n::Int, χ::Real=1.0) = FlowForcing{n}(χ)
+
+# obey callable interface
+(ff::FlowForcing{n})(t::Real, U::FT, dUdt::FT,
+                              V::FT, dVdt::FT) where {n, FT<:FTField{n}} =
+    (dVdt .+= ff.χ.*dUdt; dVdt)
+
+
 # ////// Sensitivity with respect to ν //////
 struct SensitivityWRTViscosity{n} <: AbstractForcing{n} end
 
@@ -44,6 +57,7 @@ SensitivityWRTViscosity(n::Int) = SensitivityWRTViscosity{n}()
 # obey callable interface
 (::SensitivityWRTViscosity{n})(t::Real,
                                U::FT,
+                            dUdt::FT,
                                V::FT,
                                dVdt::FT) where {n, FT<:FTField{n}} =
     (@inbounds @simd for k in wavenumbers(n);
