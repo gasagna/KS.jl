@@ -223,5 +223,4 @@ end
     V[1] = 5
 
     @test real(V.data[2]) == 5
-    @test      V.dofs[3]  == 5
 end

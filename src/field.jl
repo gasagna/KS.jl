@@ -41,6 +41,6 @@ Base.copy(u::Field) = (v = similar(u); v .= u; v)
 
 
 # ////// MESH //////
-mesh(n::Int) = range(0, stop=2π, length=2*(n+1)+1)[1:2*(n+1)]
+mesh(n::Int) = linspace(0, 2π, 2*(n+1)+1)[1:2*(n+1)]
 mesh(u::Field{n}) where {n} = mesh(n)
 mesh(U::FTField{n}) where {n} = mesh(n)

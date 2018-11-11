@@ -8,7 +8,7 @@
     # output of F
     F(0.0, U, out1) 
     # output of L and N
-    mul!(out2, L, U)
+    A_mul_B!(out2, L, U)
     N(0.0, U, out3)
     @test out1[WaveNumber(1)] == out2[WaveNumber(1)] + out3[WaveNumber(1)]
     @test out1[WaveNumber(2)] == out2[WaveNumber(2)] + out3[WaveNumber(2)]
