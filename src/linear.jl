@@ -150,10 +150,10 @@ splitexim(eq::LinearisedEquation{n, IT, ET, Nothing}) where {n, IT, ET} =
 
 # Obtain jacobian matrix (only for systems with no forcing!)
 function (eq::LinearisedEquation{n, IT, ET, Nothing})(J::AbstractMatrix,
-                                                   U::FT,
-                                                tmp1::FT,
-                                                tmp2::FT) where {n, FT, IT,
-                                                                       ET, Nothing}
+                                                      U::FT,
+                                                   tmp1::FT,
+                                                   tmp2::FT) where {n, FT, IT,
+                                                                    ET, Nothing}
     # set to zero initially, for safety
     tmp1 .= 0
     for i = 1:length(tmp1)
