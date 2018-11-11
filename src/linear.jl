@@ -86,8 +86,9 @@ end
 
 # ~~~ SOLVER OBJECT FOR THE LINEARISED EQUATIONS ~~~
 mutable struct LinearisedEquation{n,
+                                  M<:AbstractLinearMode,
                                   IT<:LinearTerm{n},
-                                  ET<:LinearisedExTerm{n},
+                                  ET<:LinearisedExTerm{n, M},
                                   G}
      imTerm::IT
      exTerm::ET
@@ -103,6 +104,7 @@ function LinearisedEquation(n::Int,
     imTerm = LinearTerm(n, ν, ISODD)
     exTerm = LinearisedExTerm(n, ISODD, mode)
     LinearisedEquation{n,
+                       typeof(mode),
                        typeof(imTerm),
                        typeof(exTerm),
                        typeof(forcing)}(imTerm, exTerm, forcing)
@@ -110,43 +112,44 @@ end
 
 
 # /// SPLIT EXPLICIT AND IMPLICIT PARTS /// 
-
-# If we have a forcing we have to integrate it explicitly, and we require passing the
-# time derivative of the main state too. This is because the linearised equations do 
-# depend on dUdt, but the forcing might.
-function splitexim(eq::LinearisedEquation{n, IT, ET, F}) where {n, IT, ET, F<:AbstractForcing}
-    
-    # integrate explicit part and forcing explicitly
-    function wrapper(t::Real,
-                     U::FTField{n},
-                     dUdt::FTField{n},
-                     V::AbstractFTField{n},
-                     dVdt::AbstractFTField{n},
-                     add::Bool=false)
-        eq.exTerm( t, U, dUdt, V, dVdt, add)
-        eq.forcing(t, U, dUdt, V, dVdt) # note forcing always adds to dVdt
+# for the tangent equations, we require dUdt as an additional argument
+function splitexim(eq::LinearisedEquation{n, TangentMode, IT, ET, F}) where {n, IT, ET, F}
+    function wrapper(t::Real, U::FTField{n}, dUdt::FTField{n},
+                              V::FTField{n}, dVdt::FTField{n}, add::Bool=false)
+        eq.exTerm(t, U, dUdt, V, dVdt, add)
+        # note forcing always adds to dVdt
+        F<:AbstractForcing && eq.forcing(t, U, dUdt, V, dVdt) 
         return dVdt
     end
-
     return wrapper, eq.imTerm
 end
 
-# If there is no forcing, things are much easier, and we just return the two fields. 
-# In this case, the explicit term does not depend on the time derivative of the main state.
-splitexim(eq::LinearisedEquation{n, IT, ET, Nothing}) where {n, IT, ET} =
-    (eq.exTerm, eq.imTerm)
+# for the adjoint equations, we dont
+function splitexim(eq::LinearisedEquation{n, AdjointMode, IT, ET, F}) where {n, IT, ET, F}
+    function wrapper(t::Real, U::FTField{n}, 
+                              V::FTField{n}, dVdt::FTField{n}, add::Bool=false)
+        eq.exTerm(t, U, V, dVdt, add)
+        # note forcing always adds to dVdt
+        F<:AbstractForcing && eq.forcing(t, U, V, dVdt) 
+        return dVdt
+    end
+    return wrapper, eq.imTerm
+end
 
 # /// EVALUATE RIGHT HAND SIDE OF LINEARISED EQUATION ///
-# Same here, if we have forcing we evaluate it, and we require passing dUdt too.
-(eq::LinearisedEquation{n, IT, ET, F})(t::Real, U, dUdt, V, dVdt) where {n, IT, ET, F<:AbstractForcing} =
+(eq::LinearisedEquation{n, TangentMode, IT, ET, F})(t::Real, U, dUdt,
+                                                 V, dVdt) where {n, IT, ET, F} =
     (mul!(dVdt, eq.imTerm, V);
         eq.exTerm(t, U, dUdt, V, dVdt, true);
-            eq.forcing(t, U, dUdt, V, dVdt); dVdt)
+            F<:AbstractForcing && eq.forcing(t, U, dUdt, V, dVdt); dVdt)
 
-(eq::LinearisedEquation{n, IT, ET, Nothing})(t::Real, U, dUdt, V, dVdt) where {n, IT, ET} =
+
+(eq::LinearisedEquation{n, AdjointMode, IT, ET, F})(t::Real, U,
+                                                 V, dVdt) where {n, IT, ET, F} =
     (mul!(dVdt, eq.imTerm, V);
-        eq.exTerm(t, U, dUdt, V, dVdt, true);
-            return dVdt)
+        eq.exTerm(t, U, V, dVdt, true);
+            F<:AbstractForcing && eq.forcing(t, U, V, dVdt); dVdt)
+
 
 # Obtain jacobian matrix (only for systems with no forcing!)
 function (eq::LinearisedEquation{n, IT, ET, Nothing})(J::AbstractMatrix,
