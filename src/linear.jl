@@ -116,6 +116,17 @@ function splitexim(eq::LinearisedEquation{n, IT, ET, F}) where {n, IT, ET, F<:Ab
         return dVdt
     end
 
+    # integrate explicit part and forcing explicitly
+    function wrapper(t::Real,
+                     U::FTField{n},
+                     V::AbstractFTField{n},
+                     dVdt::AbstractFTField{n},
+                     add::Bool=false)
+        eq.exTerm( t, U, V, dVdt, add)
+        eq.forcing(t, U, V, dVdt) # note forcing always adds to dVdt
+        return dVdt
+    end
+
     return wrapper, eq.imTerm
 end
 
