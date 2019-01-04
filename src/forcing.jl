@@ -55,6 +55,12 @@ struct SensitivityWRTViscosity{n} <: AbstractForcing{n} end
 SensitivityWRTViscosity(n::Int) = SensitivityWRTViscosity{n}()
 
 # obey callable interface
+(f::SensitivityWRTViscosity{n})(t::Real,
+                                U::FT,
+                                V::FT,
+                                dVdt::FT) where {n, FT<:FTField{n}} =
+    f(t, U, U, V, dVdt)
+
 (::SensitivityWRTViscosity{n})(t::Real,
                                U::FT,
                             dUdt::FT,
