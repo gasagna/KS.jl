@@ -153,8 +153,8 @@ Base.objectid(U::FTField) = objectid(U.data)
 
 
 # ////// inner product and norm //////
-function Base.dot(U::FTField{n, ISODD, T}, 
-                  V::FTField{n, ISODD, T}) where {n, ISODD, T}
+function dot(U::FTField{n, ISODD, T},
+             V::FTField{n, ISODD, T}) where {n, ISODD, T}
     out = zero(T)
     @inbounds @simd for k in wavenumbers(n)
         out += real(sum(U[k]*conj(V[k])))
