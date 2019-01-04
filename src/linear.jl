@@ -112,27 +112,28 @@ end
 
 
 # /// SPLIT EXPLICIT AND IMPLICIT PARTS /// 
-# for the tangent equations, we require dUdt as an additional argument
-function splitexim(eq::LinearisedEquation{n, TangentMode, IT, ET, F}) where {n, IT, ET, F}
-    function wrapper(t::Real, U::FTField{n}, dUdt::FTField{n},
-                              V::FTField{n}, dVdt::FTField{n}, add::Bool=false)
+function splitexim(eq::LinearisedEquation{n}) where {n}
+    function wrapper(t::Real, 
+                     U::FTField{n}, 
+                  dUdt::FTField{n},
+                     V::FTField{n}, 
+                  dVdt::FTField{n}, 
+                   add::Bool=false)
         eq.exTerm(t, U, dUdt, V, dVdt, add)
-        # note forcing always adds to dVdt
-        F<:AbstractForcing && eq.forcing(t, U, dUdt, V, dVdt) 
+        eq.forcing(t, U, dUdt, V, dVdt) 
         return dVdt
     end
-    return wrapper, eq.imTerm
-end
+    
+    function wrapper(t::Real,
+                     U::FTField{n},
+                     V::AbstractFTField{n},
+                     dVdt::AbstractFTField{n},
+                     add::Bool=false)
+        eq.exTerm( t, U, V, dVdt, add)
+        eq.forcing(t, U, V, dVdt) # note forcing always adds to dVdt
+        return dVdt
+    end
 
-# for the adjoint equations, we dont
-function splitexim(eq::LinearisedEquation{n, AdjointMode, IT, ET, F}) where {n, IT, ET, F}
-    function wrapper(t::Real, U::FTField{n}, 
-                              V::FTField{n}, dVdt::FTField{n}, add::Bool=false)
-        eq.exTerm(t, U, V, dVdt, add)
-        # note forcing always adds to dVdt
-        F<:AbstractForcing && eq.forcing(t, U, V, dVdt) 
-        return dVdt
-    end
     return wrapper, eq.imTerm
 end
 

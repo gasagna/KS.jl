@@ -33,10 +33,10 @@ struct FTField{n,
                T,
                V<:AbstractVector{Complex{T}},
                P<:Ptr{T}} <: AbstractFTField{n, ISODD, T}
-    data::V   # the data as a complex array
-    dptr::P   # linearised data for fast look-up of the degrees of freedom
-              # this is a essentially a view over data
-               # with complex input
+    data::V # the data as a complex array
+    dptr::P # linearised data for fast look-up of the degrees of freedom
+            # this is a essentially a view over data
+            # with complex input
     function FTField{n, ISODD}(input::V) where {n,
                                                 ISODD,
                                                 T<:Real,
@@ -82,7 +82,6 @@ function _write(data::AbstractVector, input::AbstractVector, ::Val{false})
     end
     return data
 end
-
 
 # ////// outer constructors //////
 FTField(n::Int, isodd::Bool, fun=k->0) =
@@ -138,11 +137,11 @@ Base.checkbounds(U::AbstractFTField{n}, i::Int) where {n} =
 
 # indexing over the wave numbers
 @inline Base.getindex(U::FTField, k::WaveNumber) =
-    (@boundscheck checkbounds(U, k); getindex(U.data, k+1))
+    (@boundscheck checkbounds(U, k); @inbounds ret = U.data[k+1]; ret)
 
 # no guarantee we do not break the invariance!!
 @inline Base.setindex!(U::FTField, val, k::WaveNumber) =
-    (@boundscheck checkbounds(U, k); setindex!(U.data, val, k+1))
+    (@boundscheck checkbounds(U, k); @inbounds U.data[k+1] = val; val)
 
 
 Base.similar(U::FTField{n, ISODD}) where {n, ISODD} = FTField(n, ISODD)
@@ -154,8 +153,14 @@ Base.objectid(U::FTField) = objectid(U.data)
 
 
 # ////// inner product and norm //////
-dot(U::FTField{n}, V::FTField{n}) where {n} =
-    real(sum(U[k]*conj(V[k]) for k in wavenumbers(n)))
+function Base.dot(U::FTField{n, ISODD, T}, 
+                  V::FTField{n, ISODD, T}) where {n, ISODD, T}
+    out = zero(T)
+    @inbounds @simd for k in wavenumbers(n)
+        out += real(sum(U[k]*conj(V[k])))
+    end
+    return out
+end
 
 norm(U::FTField) = sqrt(dot(U, U))
 

@@ -46,11 +46,11 @@ mul!(dUdt::AbstractFTField{n},
 
 Flows.ImcA!(imTerm::LinearTerm{n},
                  c::Real,
-                 U::AbstractFTField{n},
-              dUdt::AbstractFTField{n}) where {n} =
+                 U::AbstractFTField{n, ISODD, T},
+              dUdt::AbstractFTField{n, ISODD, T}) where {n, ISODD, T} =
     (_set_symmetry!(U);
      @inbounds for k in wavenumbers(n)
-          dUdt[k] = U[k]/(1 - c*imTerm.A[k])
+          dUdt[k] = U[k]/(one(T) - c*real(imTerm.A[k]))
      end; dUdt)
 
 
