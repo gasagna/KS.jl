@@ -15,8 +15,11 @@ DummyForcing(n::Int) = DummyForcing{n}()
 # call for nonlinear equation
 (::DummyForcing{n})(t, U::FT, dUdt::FT) where {n, FT<:AbstractFTField{n}} = dUdt
 
-# and for the linear equation
+# and for the linear equations
 (::DummyForcing{n})(t, U::FT, dUdt::FT,
+                       V::FT, dVdt::FT) where {n, FT<:AbstractFTField{n}} = dVdt
+
+(::DummyForcing{n})(t, U::FT,
                        V::FT, dVdt::FT) where {n, FT<:AbstractFTField{n}} = dVdt
 
 

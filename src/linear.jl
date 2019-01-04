@@ -26,7 +26,6 @@ LinearisedExTerm(n::Int, ISODD::Bool, mode::M) where {M <: AbstractLinearMode} =
 # evaluate linear operator around U
 function (lks::LinearisedExTerm{n, TangentMode})(t::Real,
                                                  U::FTField{n},
-                                              dUdt::FTField{n},
                                                  V::FTField{n},
                                               dVdt::FTField{n},
                                                add::Bool=false) where {n}
@@ -100,7 +99,7 @@ function LinearisedEquation(n::Int,
                             ν::Real,
                             ISODD::Bool,
                             mode::AbstractLinearMode,
-                            forcing=nothing)
+                            forcing=DummyForcing(n))
     imTerm = LinearTerm(n, ν, ISODD)
     exTerm = LinearisedExTerm(n, ISODD, mode)
     LinearisedEquation{n,
@@ -119,18 +118,18 @@ function splitexim(eq::LinearisedEquation{n}) where {n}
                      V::FTField{n}, 
                   dVdt::FTField{n}, 
                    add::Bool=false)
-        eq.exTerm(t, U, dUdt, V, dVdt, add)
+        eq.exTerm(t, U, V, dVdt, add)
         eq.forcing(t, U, dUdt, V, dVdt) 
         return dVdt
     end
-    
+
     function wrapper(t::Real,
                      U::FTField{n},
-                     V::AbstractFTField{n},
-                     dVdt::AbstractFTField{n},
+                     V::FTField{n},
+                     dVdt::FTField{n},
                      add::Bool=false)
         eq.exTerm( t, U, V, dVdt, add)
-        eq.forcing(t, U, V, dVdt) # note forcing always adds to dVdt
+        eq.forcing(t, U, V, dVdt)
         return dVdt
     end
 
@@ -138,26 +137,30 @@ function splitexim(eq::LinearisedEquation{n}) where {n}
 end
 
 # /// EVALUATE RIGHT HAND SIDE OF LINEARISED EQUATION ///
-(eq::LinearisedEquation{n, TangentMode, IT, ET, F})(t::Real, U, dUdt,
-                                                 V, dVdt) where {n, IT, ET, F} =
-    (mul!(dVdt, eq.imTerm, V);
-        eq.exTerm(t, U, dUdt, V, dVdt, true);
-            F<:AbstractForcing && eq.forcing(t, U, dUdt, V, dVdt); dVdt)
-
-
-(eq::LinearisedEquation{n, AdjointMode, IT, ET, F})(t::Real, U,
-                                                 V, dVdt) where {n, IT, ET, F} =
+(eq::LinearisedEquation{n})(t::Real, 
+                            U::FTField{n}, 
+                         dUdt::FTField{n},
+                            V::FTField{n}, 
+                         dVdt::FTField{n}) where {n} =
     (mul!(dVdt, eq.imTerm, V);
         eq.exTerm(t, U, V, dVdt, true);
-            F<:AbstractForcing && eq.forcing(t, U, V, dVdt); dVdt)
+            eq.forcing(t, U, dUdt, V, dVdt); dVdt)
+
+
+(eq::LinearisedEquation{n})(t::Real,
+                            U::FTField{n},
+                            V::FTField{n},
+                         dVdt::FTField{n}) where {n} =
+    (mul!(dVdt, eq.imTerm, V);
+        eq.exTerm(t, U, V, dVdt, true);
+            eq.forcing(t, U, V, dVdt); dVdt)
 
 
 # Obtain jacobian matrix (only for systems with no forcing!)
-function (eq::LinearisedEquation{n, IT, ET, Nothing})(J::AbstractMatrix,
-                                                      U::FT,
-                                                   tmp1::FT,
-                                                   tmp2::FT) where {n, FT, IT,
-                                                                    ET, Nothing}
+function (eq::LinearisedEquation{n})(J::AbstractMatrix,
+                                     U::FTField{n},
+                                  tmp1::FTField{n},
+                                  tmp2::FTField{n}) where {n}
     # set to zero initially, for safety
     tmp1 .= 0
     for i = 1:length(tmp1)

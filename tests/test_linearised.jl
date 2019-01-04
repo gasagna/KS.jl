@@ -81,7 +81,7 @@ end
     v1 = dot(V, ψ⁺(copy(V⁺),cache))
     v2 = dot(V⁺, ψ(copy(V), cache))
     
-    @test abs(v1-v2)/abs(v1) < 5e-14
+    @test abs(v1-v2)/abs(v1) < 6e-14
 end
 
 @testset "perturbations to the trivial base      " begin
