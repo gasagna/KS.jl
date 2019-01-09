@@ -154,24 +154,3 @@ end
     (mul!(dVdt, eq.imTerm, V);
         eq.exTerm(t, U, V, dVdt, true);
             eq.forcing(t, U, V, dVdt); dVdt)
-
-
-# Obtain jacobian matrix (only for systems with no forcing!)
-function (eq::LinearisedEquation{n})(J::AbstractMatrix,
-                                     U::FTField{n},
-                                  tmp1::FTField{n},
-                                  tmp2::FTField{n}) where {n}
-    # set to zero initially, for safety
-    tmp1 .= 0
-    for i = 1:length(tmp1)
-        # perturb one component
-        tmp1[i] = 1
-        # apply linearised operator
-        eq(0, U, tmp1, tmp2)
-        # write to matrix
-        J[:, i] .= tmp2
-        # reset component to zero
-        tmp1[i] = 0
-    end
-    return J
-end
