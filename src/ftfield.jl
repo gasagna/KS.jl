@@ -148,6 +148,8 @@ Base.checkbounds(U::AbstractFTField{n}, i::Int) where {n} =
 Base.similar(U::FTField{n, ISODD}) where {n, ISODD} = FTField(n, ISODD)
 Base.copy(U::FTField) = (V = similar(U); V .= U; V)
 Base.deepcopy(U::FTField) = copy(U)
+Base.parent(U::FTField) = U.data
+
 
 # see julia issue #28178
 Base.objectid(U::FTField) = objectid(U.data)
