@@ -141,6 +141,16 @@ end
     @test abs(dot(U, shift!(copy(V), 1)) - dot(shift!(copy(U), -1), V)) < 3e-16
 end
 
+@testset "mindiff                                " begin
+    U = FTField([1.0, 2.0, 3.0, 4.0], false)
+    V = shift!(copy(U), 4*2π/20)
+    dmin, (smin, ) = mindotdiff(U, V)
+    @test dmin < 1e-16
+    @test smin == 4*2π/20
+    @test isapprox(U[WaveNumber(1)], 1.0 + 2.0*im)
+    @test isapprox(U[WaveNumber(2)], 3.0 + 4.0*im)
+end
+
 @testset "dot and norm                           " begin
     # we divide by two to be consistent with the fact that 
     # our degrees of freedom do not include the `negative`
