@@ -9,7 +9,8 @@ export AbstractFTField,
        dotdiff,
        shift!,
        diffmat,
-       mindotdiff
+       mindotdiff,
+       grow
 
 import LinearAlgebra: dot, norm
 import SparseArrays: spdiagm
@@ -150,6 +151,8 @@ Base.copy(U::FTField) = (V = similar(U); V .= U; V)
 Base.deepcopy(U::FTField) = copy(U)
 Base.parent(U::FTField) = U.data
 
+grow(U::FTField{n, ISODD}, m::Int) where {n, ISODD} = 
+     FTField(vcat(U.data[2:end-1], im*zeros(m - n)), ISODD)
 
 # see julia issue #28178
 Base.objectid(U::FTField) = objectid(U.data)

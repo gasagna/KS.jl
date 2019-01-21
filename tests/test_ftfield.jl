@@ -110,6 +110,20 @@ end
     end
 end
 
+@testset "grow                                   " begin
+    U = FTField(3, false)
+    U[WaveNumber(1)] = 2.0 + im/1
+    U[WaveNumber(2)] = 3.0 + im/2
+    U[WaveNumber(3)] = 4.0 + im/3
+    V = grow(U, 5)
+    @test typeof(V) == FTField{5, false, Float64, Array{Complex{Float64}, 1}, Ptr{Float64}}
+    @test V[WaveNumber(1)] == 2.0 + im/1
+    @test V[WaveNumber(2)] == 3.0 + im/2
+    @test V[WaveNumber(3)] == 4.0 + im/3
+    @test V[WaveNumber(4)] == 0
+    @test V[WaveNumber(5)] == 0
+end
+
 @testset "derivative                             " begin
     U = FTField(3, false); 
     U[WaveNumber(1)] = 2.0 + im/1
