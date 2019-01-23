@@ -5,7 +5,8 @@
 export SensitivityWRTViscosity,
        SteadyForcing,
        DummyForcing,
-       FlowForcing
+       FlowForcing,
+       EnergyGradient
 
 # ////// DUMMY FORCING - DOES NOTHING //////
 struct DummyForcing{n} <: AbstractForcing{n} end
@@ -72,3 +73,12 @@ SensitivityWRTViscosity(n::Int) = SensitivityWRTViscosity{n}()
     (@inbounds @simd for k in wavenumbers(n);
           dVdt[k] -= k^4*U[k]
      end; dVdt)
+
+# forcing for adjoint equation based on energy density gradient
+struct EnergyGradient{n} <: AbstractForcing{n} end
+
+(::EnergyGradient{n})(t::Real,
+                      U::FT,
+                      V::FT,
+                      dVdt::FT) where {n, FT<:FTField{n}} = 
+    (dVdt .+= U; dVdt)
