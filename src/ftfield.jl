@@ -6,10 +6,10 @@ export AbstractFTField,
        wavenumber,
        FTField,
        ddx!,
-       dotdiff,
+       normdiff,
        shift!,
        diffmat,
-       mindotdiff,
+       minnormdiff,
        grow
 
 import LinearAlgebra: dot, norm
@@ -170,27 +170,27 @@ end
 
 norm(U::FTField) = sqrt(dot(U, U))
 
-# ////// squared norm of the difference //////
-dotdiff(U::FTField{n}, V::FTField{n}) where {n} =
-    real(sum(abs2(U[k] - V[k]) for k in wavenumbers(n)))
+# ////// norm of the difference //////
+normdiff(U::FTField{n}, V::FTField{n}) where {n} =
+    sqrt(real(sum(abs2(U[k] - V[k]) for k in wavenumbers(n))))
 
 # Return minimum distance between two fields. This return the distance and 
 # the shift that needs to be applied on the first field to obtain the minimum 
 # distance. This is obtained by calculating the distance for "N" shifted 
 # fields and returning the minimum. 
-function mindotdiff(U::FTField{n}, V::FTField{n}, N::Int=20) where {n}
-    dmin = dotdiff(U, V)
+function minnormdiff(U::FTField{n}, V::FTField{n}, N::Int=20) where {n}
+    dmin = normdiff(U, V)
     imin = 0
     for i = 1:N
         # by shifting N times by 2π/N we leave U unchanged at the exit
         shift!(U, 2π/N)
-        d = dotdiff(U, V)
+        d = normdiff(U, V)
         if d < dmin
             dmin = d
             imin = i
         end
     end
-    return dmin, (imin * 2π / N, )
+    return dmin, (imin * 2π/N, )
 end
 
 # ////// shifts and differentiation //////

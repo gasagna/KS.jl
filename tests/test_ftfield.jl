@@ -150,16 +150,16 @@ end
     V = FTField(n, ISODD, k->exp(2π*im*rand())/k)
 
     shouldbeU = shift!(shift!(copy(U), 1), -1)
-    @test sqrt(dotdiff(U, shouldbeU)) < 3e-16
+    @test normdiff(U, shouldbeU) < 1e-14
 
-    @test abs(dot(U, shift!(copy(V), 1)) - dot(shift!(copy(U), -1), V)) < 3e-16
+    @test abs(dot(U, shift!(copy(V), 1)) - dot(shift!(copy(U), -1), V)) < 1e-14
 end
 
 @testset "mindiff                                " begin
     U = FTField([1.0, 2.0, 3.0, 4.0], false)
     V = shift!(copy(U), 4*2π/20)
-    dmin, (smin, ) = mindotdiff(U, V)
-    @test dmin < 1e-16
+    dmin, (smin, ) = minnormdiff(U, V)
+    @test dmin < 1e-14
     @test smin == 4*2π/20
     @test isapprox(U[WaveNumber(1)], 1.0 + 2.0*im)
     @test isapprox(U[WaveNumber(2)], 3.0 + 4.0*im)
