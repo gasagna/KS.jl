@@ -237,10 +237,3 @@ end
         @test U[WaveNumber(2)] == 0+4*im
     end
 end
-
-@testset "deepcopy                               " begin
-    U = FTField([1, 2, 3, 4], false)
-    V = deepcopy(U)
-    V[1] = 5
-    @test real(V.data[2]) == 5
-end
