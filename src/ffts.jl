@@ -21,7 +21,7 @@ _normalise!(U::FTField{n}) where {n} = (U.data .*= 1/(2n+2); U)
 struct ForwardFFT{n, P}
     plan::P
     function ForwardFFT(u::AbstractField{n}) where {n}
-        plan = FFTW.plan_rfft(u.data, flags=FFTW.PATIENT)
+        plan = FFTW.plan_rfft(u.data, flags=FFTW.EXHAUSTIVE)
         new{n, typeof(plan)}(plan)
     end
 end
@@ -35,7 +35,7 @@ end
 struct InverseFFT{n, P}
     plan::P
     function InverseFFT(U::AbstractFTField{n}) where {n}
-        plan = FFTW.plan_brfft(U.data, 2*(n+1), flags=FFTW.PATIENT)
+        plan = FFTW.plan_brfft(U.data, 2*(n+1), flags=FFTW.EXHAUSTIVE)
         new{n, typeof(plan)}(plan)
     end
 end
