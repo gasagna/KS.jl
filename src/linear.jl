@@ -1,7 +1,7 @@
 export LinearisedEquation
 
 # ////// LINEARISED EQUATION //////
-struct LinearisedExTerm{n, M<:AbstractLinearMode, FT<:FTField{n}, F<:Field{n}}
+struct LinearisedExTerm{n, ISODD, M<:AbstractLinearMode, FT<:FTField, F<:Field}
     TMP1::FT # temporary in Fourier space
     TMP2::FT # temporary in Fourier space
     tmp1::F  # temporary in physical space
@@ -9,26 +9,33 @@ struct LinearisedExTerm{n, M<:AbstractLinearMode, FT<:FTField{n}, F<:Field{n}}
     tmp3::F  # temporary in physical space
     ifft     # plans
     fft      #
-    function LinearisedExTerm{n, M}(ISODD::Bool) where {n, M}
+    function LinearisedExTerm{n, ISODD, M}() where {n, ISODD, M}
         TMP1 = FTField(n, ISODD); TMP2 = FTField(n, ISODD)
         tmp1 = Field(n); tmp2 = Field(n); tmp3 = Field(n)
         ifft = InverseFFT(TMP1); fft  = ForwardFFT(tmp1)
-        new{n, M, typeof(TMP1), typeof(tmp1)}(TMP1,
+        new{n, ISODD, M, typeof(TMP1), typeof(tmp1)}(TMP1,
                 TMP2, tmp1, tmp2, tmp3, ifft, fft)
     end
 end
 
 # constructor
 LinearisedExTerm(n::Int, ISODD::Bool, mode::M) where {M <: AbstractLinearMode} = 
-    LinearisedExTerm{n, M}(ISODD)
+    LinearisedExTerm{n, ISODD, M}()
 
+function Base.deepcopy_internal(x::LinearisedExTerm{n, ISODD, M}, 
+                             dict::IdDict) where {n, ISODD, M}
+    if !( haskey(dict, x) )
+        dict[x] = LinearisedExTerm{n, ISODD, M}()
+    end
+    return dict[x]
+end
 
 # evaluate linear operator around U
-function (lks::LinearisedExTerm{n, TangentMode})(t::Real,
-                                                 U::FTField{n},
-                                                 V::FTField{n},
-                                              dVdt::FTField{n},
-                                               add::Bool=false) where {n}
+function (lks::LinearisedExTerm{n, ISODD, TangentMode})(t::Real,
+                                                        U::FTField{n},
+                                                        V::FTField{n},
+                                                     dVdt::FTField{n},
+                                                      add::Bool=false) where {n, ISODD}
 
     # /// calculate - v * uₓ term ///
     lks.ifft(V, lks.tmp1)               # transform V to physical space
@@ -53,11 +60,11 @@ function (lks::LinearisedExTerm{n, TangentMode})(t::Real,
 end
 
 # evaluate adjoint operator around U
-function (lks::LinearisedExTerm{n, AdjointMode})(t::Real,
-                                                 U::FTField{n},
-                                                 V::FTField{n},
-                                              dVdt::FTField{n},
-                                               add::Bool=false) where {n}
+function (lks::LinearisedExTerm{n, ISODD, AdjointMode})(t::Real,
+                                                        U::FTField{n},
+                                                        V::FTField{n},
+                                                     dVdt::FTField{n},
+                                                      add::Bool=false) where {n, ISODD}
 
     # /// calculate - v * uₓ term ///
     lks.ifft(V, lks.tmp1)               # transform V to physical space
@@ -82,12 +89,12 @@ function (lks::LinearisedExTerm{n, AdjointMode})(t::Real,
     return dVdt
 end
 
-
 # ~~~ SOLVER OBJECT FOR THE LINEARISED EQUATIONS ~~~
 mutable struct LinearisedEquation{n,
+                                  ISODD,
                                   M<:AbstractLinearMode,
                                   IT<:LinearTerm{n},
-                                  ET<:LinearisedExTerm{n, M},
+                                  ET<:LinearisedExTerm{n, ISODD, M},
                                   G}
      imTerm::IT
      exTerm::ET
@@ -103,6 +110,7 @@ function LinearisedEquation(n::Int,
     imTerm = LinearTerm(n, ν, ISODD)
     exTerm = LinearisedExTerm(n, ISODD, mode)
     LinearisedEquation{n,
+                       ISODD,
                        typeof(mode),
                        typeof(imTerm),
                        typeof(exTerm),

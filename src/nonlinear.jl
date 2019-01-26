@@ -55,25 +55,25 @@ Flows.ImcA!(imTerm::LinearTerm{n},
 
 
 # ////// NONLINEAR TERM //////
-struct NonLinearExTerm{n, FT<:AbstractFTField{n}, F<:AbstractField{n}}
-     V::FT      # temporary in Fourier space
-     u::F       # solution in physical space
-    ifft        # plans
-    fft         #
+struct NonLinearExTerm{n, ISODD, FT<:AbstractFTField{n}, F<:AbstractField{n}}
+       V::FT      # temporary in Fourier space
+       u::F       # solution in physical space
+    ifft
+     fft
     function NonLinearExTerm{n}(ISODD::Bool) where {n}
         V = FTField(n, ISODD); u = Field(n)
         fft, ifft = ForwardFFT(u), InverseFFT(V)
-        new{n, typeof(V), typeof(u)}(V, u, ifft, fft)
+        new{n, ISODD, typeof(V), typeof(u)}(V, u, ifft, fft)
     end
 end
 
 NonLinearExTerm(n::Int, ISODD::Bool) = NonLinearExTerm{n}(ISODD)
 
 @inline function
-    (exTerm::NonLinearExTerm{n, FT})(t::Real,
-                                     U::FT,
-                                     dUdt::FT,
-                                     add::Bool=false) where {n, FT}
+    (exTerm::NonLinearExTerm{n, ISODD, FT})(t::Real,
+                                            U::FT,
+                                         dUdt::FT,
+                                          add::Bool=false) where {n, ISODD, FT}
     _set_symmetry!(U)
     exTerm.ifft(U, exTerm.u)        # copy and inverse transform
     exTerm.u .= exTerm.u.^2         # square
@@ -86,6 +86,13 @@ NonLinearExTerm(n::Int, ISODD::Bool) = NonLinearExTerm{n}(ISODD)
     return dUdt
 end
 
+function Base.deepcopy_internal(x::NonLinearExTerm{n, ISODD}, 
+                             dict::IdDict) where {n, ISODD}
+    if !( haskey(dict, x) )
+        dict[x] = NonLinearExTerm(n, ISODD)
+    end
+    return dict[x]
+end
 
 # ////// COMPLETE EQUATION //////
 struct ForwardEquation{n,
