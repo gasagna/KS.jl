@@ -1,36 +1,3 @@
-@testset "test jacobians                         " begin
-    for n = [16, 32, 64, 128]
-        for ISODD in (true, false)
-            ν = 0.123456
-            ISODD = true
-            L     = LinearisedEquation(n, ν, ISODD, TangentMode())
-            L_adj = LinearisedEquation(n, ν, ISODD, AdjointMode())
-
-            # make random field
-            U = FTField(n, ISODD, k->exp(2π*im*rand())/k)
-
-            # number of dofs
-            N = length(U)
-
-            # calc jacobians matrices
-            J     =     L(zeros(N, N), U, similar(U), similar(U))
-            J_adj = L_adj(zeros(N, N), U, similar(U), similar(U))
-
-            @test mean(abs, J - J_adj') < 1e-11
-
-            # get a random tangent vector
-            V = FTField(n, ISODD, k->exp(2π*im*rand())/k)
-            
-            # jacoabian acting on this vector
-            LV = L(0, U, V, similar(U))
-            @test norm(LV - J*V)/N < 1e-11
-
-            L_adjV = L_adj(0, U, V, similar(U))
-            @test norm(L_adjV - J_adj*V)/N < 1e-11
-        end
-    end
-end
-
 @testset "test adjoint identities                " begin
     # parameters
     ν        = (2π/100)^2
