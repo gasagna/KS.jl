@@ -6,7 +6,21 @@ export SensitivityWRTViscosity,
        SteadyForcing,
        DummyForcing,
        FlowForcing,
-       EnergyGradient
+       EnergyGradient,
+       BlowingForcing
+
+
+struct BlowingForcing{n, FT<:AbstractFTField{n}} <: AbstractForcing{n} 
+    TMP::FT
+    c::Float64
+end
+
+BlowingForcing(U::AbstractFTField{n}, c::Real) where {n} = 
+    BlowingForcing{n, typeof(U)}(copy(U), c)
+
+# call for nonlinear equation
+(b::BlowingForcing{n})(t, U::FT, dUdt::FT) where {n, FT<:AbstractFTField{n}} = 
+    (ddx!(b.TMP, U); dUdt .+= b.c.*b.TMP; dUdt)
 
 # ////// DUMMY FORCING - DOES NOTHING //////
 struct DummyForcing{n} <: AbstractForcing{n} end
@@ -36,6 +50,12 @@ Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.H[i] = val)
 # add to dUdt by default
 @inline (sf::SteadyForcing{n, FT})(t::Real, U::FT, dUdt::FT) where {n, FT<:AbstractFTField{n}} =
     (dUdt .+= sf.H; return dUdt)
+
+@inline (sf::SteadyForcing{n, FT})(t::Real, U::FT, V::FT, dVdt::FT) where {n, FT<:AbstractFTField{n}} =
+    (dVdt .+= sf.H; return dVdt)
+
+@inline (sf::SteadyForcing{n, FT})(t::Real, U::FT, dUdt::FT, V::FT, dVdt::FT) where {n, FT<:AbstractFTField{n}} =
+    (dVdt .+= sf.H; return dVdt)
 
 
 # ////// FORCING ALONG f(x(T)) //////
@@ -77,8 +97,10 @@ SensitivityWRTViscosity(n::Int) = SensitivityWRTViscosity{n}()
 # forcing for adjoint equation based on energy density gradient
 struct EnergyGradient{n} <: AbstractForcing{n} end
 
+EnergyGradient(n::Int) = EnergyGradient{n}()
+
 (::EnergyGradient{n})(t::Real,
                       U::FT,
                       V::FT,
                       dVdt::FT) where {n, FT<:FTField{n}} = 
-    (dVdt .+= U; dVdt)
+    (dVdt .-= U; dVdt)
