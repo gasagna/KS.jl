@@ -155,7 +155,7 @@ grow(U::FTField{n, ISODD}, m::Int) where {n, ISODD} =
 
 # see julia issue #28178
 Base.objectid(U::FTField) = objectid(U.data)
-
+Base.mightalias(A::FTField, B::FTField) = Base.mightalias(A.data, B.data)
 
 # ////// inner product and norm //////
 function dot(U::FTField{n, ISODD, T},

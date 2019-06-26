@@ -39,7 +39,7 @@ Field(n::Int, ::Type{T}=Float64) where{T} = Field{n}(zeros(T, 2*(n+1)))
 Base.similar(u::Field{n}) where {n} = Field(n)
 Base.copy(u::Field) = (v = similar(u); v .= u; v)
 Base.objectid(U::Field) = objectid(U.data)
-
+Base.mightalias(A::Field, B::Field) = Base.mightalias(A.data, B.data)
 
 # ////// MESH //////
 mesh(n::Int) = range(0, stop=2π, length=2*(n+1)+1)[1:2*(n+1)]
