@@ -110,11 +110,14 @@ end
     end
 end
 
-@testset "grow                                   " begin
-    U = FTField(3, false)
+@testset "grow/shrink                            " begin
+    _U = FTField(3, false)
+    U = grow(_U, 3)
     U[WaveNumber(1)] = 2.0 + im/1
     U[WaveNumber(2)] = 3.0 + im/2
     U[WaveNumber(3)] = 4.0 + im/3
+    
+    @test_throws ArgumentError grow(U, 2)
     V = grow(U, 5)
     @test typeof(V) == FTField{5, false, Float64, Array{Complex{Float64}, 1}, Ptr{Float64}}
     @test V[WaveNumber(1)] == 2.0 + im/1
@@ -122,6 +125,26 @@ end
     @test V[WaveNumber(3)] == 4.0 + im/3
     @test V[WaveNumber(4)] == 0
     @test V[WaveNumber(5)] == 0
+
+    @test_throws ArgumentError shrink(U, 4)
+    W = shrink(U, 2)
+    W[WaveNumber(1)] = 2.0 + im/1
+    W[WaveNumber(2)] = 3.0 + im/2
+    @test typeof(W) == FTField{2, false, Float64, Array{Complex{Float64}, 1}, Ptr{Float64}}
+
+    # change resolution
+    W_large = toresol(W, 5)
+    @test typeof(W_large) == FTField{5, false, Float64, Array{Complex{Float64}, 1}, Ptr{Float64}}
+    @test W_large[WaveNumber(1)] == 2.0 + im/1
+    @test W_large[WaveNumber(2)] == 3.0 + im/2
+    @test W_large[WaveNumber(3)] == 0
+    @test W_large[WaveNumber(4)] == 0
+    @test W_large[WaveNumber(5)] == 0
+    
+    W_small = toresol(W_large, 2)
+    @test typeof(W_small) == FTField{2, false, Float64, Array{Complex{Float64}, 1}, Ptr{Float64}}
+    @test W_small[WaveNumber(1)] == 2.0 + im/1
+    @test W_small[WaveNumber(2)] == 3.0 + im/2
 end
 
 @testset "derivative                             " begin

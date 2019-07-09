@@ -10,7 +10,9 @@ export AbstractFTField,
        shift!,
        diffmat,
        minnormdiff,
-       grow
+       grow,
+       shrink,
+       toresol
 
 import LinearAlgebra: dot, norm
 import SparseArrays: spdiagm
@@ -150,8 +152,25 @@ Base.similar(U::FTField{n, ISODD}) where {n, ISODD} = FTField(n, ISODD)
 Base.copy(U::FTField) = (V = similar(U); V .= U; V)
 Base.parent(U::FTField) = U.data
 
-grow(U::FTField{n, ISODD}, m::Int) where {n, ISODD} = 
-     FTField(vcat(U.data[2:end-1], im*zeros(m - n)), ISODD)
+function grow(U::FTField{n, ISODD}, m::Int) where {n, ISODD}
+    if m < n
+        throw(ArgumentError("cannot grow to smaller resolution"))
+    end
+    return FTField(vcat(U.data[2:end-1], im*zeros(m - n)), ISODD)
+end
+
+function shrink(U::FTField{n, ISODD}, m::Int) where {n, ISODD}
+    if m > n
+        throw(ArgumentError("cannot shrink to larger resolution"))
+    end
+    return FTField(U.data[2:(m+1)] + im*zeros(m), ISODD)
+end
+
+function toresol(U::FTField{n, ISODD}, m::Int) where {n, ISODD}
+    n == m && return U
+    m  > n && return grow(U, m)
+    m  < n && return shrink(U, m)
+end
 
 # see julia issue #28178
 Base.objectid(U::FTField) = objectid(U.data)
