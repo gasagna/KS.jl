@@ -82,17 +82,28 @@ SensitivityWRTViscosity(n::Int) = SensitivityWRTViscosity{n}()
 (f::SensitivityWRTViscosity{n})(t::Real,
                                 U::FT,
                                 V::FT,
-                                dVdt::FT) where {n, FT<:FTField{n}} =
+                             dVdt::FT) where {n, FT<:FTField{n}} =
     f(t, U, U, V, dVdt)
 
-(::SensitivityWRTViscosity{n})(t::Real,
-                               U::FT,
-                            dUdt::FT,
-                               V::FT,
-                               dVdt::FT) where {n, FT<:FTField{n}} =
-    (@inbounds @simd for k in wavenumbers(n);
+function (::SensitivityWRTViscosity{n})(t::Real,
+                                        U::FT,
+                                     dUdt::FT,
+                                        V::FT,
+                                     dVdt::FT) where {n, FT<:FTField{n}}
+    @inbounds @simd for k in wavenumbers(n)
           dVdt[k] -= k^4*U[k]
-     end; dVdt)
+    end
+    return dVdt
+end
+
+# used in VaPOrE
+function (f::SensitivityWRTViscosity{n})(dVdt::FT,
+                                            U::FT) where {n, FT<:FTField{n}}
+    @inbounds @simd for k in wavenumbers(n)
+          dVdt[k] = -k^4*U[k]
+    end
+    return dVdt
+end
 
 # forcing for adjoint equation based on energy density gradient
 struct EnergyGradient{n} <: AbstractForcing{n} end
