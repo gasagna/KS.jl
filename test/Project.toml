@@ -7,4 +7,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [sources]
 KS = {path = ".."}
-Flows = {url = "https://github.com/Davide-Lasagna-s-Lab/Flows.jl", rev = "rk8"}
+Flows = {url = "https://github.com/Davide-Lasagna-s-Lab/Flows.jl", rev = "master"}
