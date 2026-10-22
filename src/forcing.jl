@@ -41,11 +41,16 @@ DummyForcing(n::Int) = DummyForcing{n}()
 # ////// STEADY FORCING //////
 struct SteadyForcing{n, FT<:AbstractFTField{n}} <: AbstractForcing{n}
     H::FT
+    function SteadyForcing(n::Int, ISODD::Bool, i::Int)
+        h = FTField(n, ISODD)
+        h[i] = 1
+        return new{n, typeof(h)}(h)
+    end
 end
 
 # allow indexing this object
-Base.getindex(sf::SteadyForcing, i::Int) = sf.H[i]
-Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.H[i] = val)
+Base.getindex(sf::SteadyForcing, i...) = getindex(sf.H, i...)
+# Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.H[i] = val)
 
 # add to dUdt by default
 @inline (sf::SteadyForcing{n, FT})(t::Real, U::FT, dUdt::FT) where {n, FT<:AbstractFTField{n}} =
@@ -57,6 +62,14 @@ Base.setindex!(sf::SteadyForcing, val, i::Int) = (sf.H[i] = val)
 @inline (sf::SteadyForcing{n, FT})(t::Real, U::FT, dUdt::FT, V::FT, dVdt::FT) where {n, FT<:AbstractFTField{n}} =
     (dVdt .+= sf.H; return dVdt)
 
+ # used in VaPOrE
+function (sf::SteadyForcing{n, FT})(dVdt::FT,
+                                       U::FT) where {n, FT<:FTField{n}}
+    @inbounds @simd for k in wavenumbers(n)
+          dVdt[k] = sf[k]
+    end
+    return dVdt
+end
 
 # ////// FORCING ALONG f(x(T)) //////
 mutable struct FlowForcing{n} <: AbstractForcing{n}
@@ -99,6 +112,7 @@ end
 # used in VaPOrE
 function (f::SensitivityWRTViscosity{n})(dVdt::FT,
                                             U::FT) where {n, FT<:FTField{n}}
+    dVdt .= 0
     @inbounds @simd for k in wavenumbers(n)
           dVdt[k] = -k^4*U[k]
     end

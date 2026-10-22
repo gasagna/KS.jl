@@ -1,31 +1,57 @@
 export LinearisedEquation
 
 # ////// LINEARISED EQUATION //////
-struct LinearisedExTerm{n, ISODD, M<:AbstractLinearMode, FT<:FTField, F<:Field}
+struct LinearisedExTerm{n, ISODD, M<:AbstractLinearMode, FT<:FTField, F<:Field, IP, FP}
     TMP1::FT # temporary in Fourier space
     TMP2::FT # temporary in Fourier space
-    tmp1::F  # temporary in physical space
+    tmp1::F  # temporary in physical space, on the grid of the products
     tmp2::F  # temporary in physical space
     tmp3::F  # temporary in physical space
-    ifft     # plans
-    fft      #
-    function LinearisedExTerm{n, ISODD, M}() where {n, ISODD, M}
-        TMP1 = FTField(n, ISODD); TMP2 = FTField(n, ISODD)
-        tmp1 = Field(n); tmp2 = Field(n); tmp3 = Field(n)
-        ifft = InverseFFT(TMP1); fft  = ForwardFFT(tmp1)
-        new{n, ISODD, M, typeof(TMP1), typeof(tmp1)}(TMP1,
-                TMP2, tmp1, tmp2, tmp3, ifft, fft)
+    ifft::IP # inverse transform, n modes to the grid
+     fft::FP # forward transform, grid to n modes
+    function LinearisedExTerm{n, ISODD, M}(; dealias::Symbol=:none) where {n, ISODD, M}
+        # ---- input checks ----
+        dealias in (:none, :pad) ||
+            throw(ArgumentError("dealias must be :none or :pad"))
+
+        # ---- temporaries and transforms ----
+        m    = _gridmodes(n, dealias)
+        TMP1 = FTField(n, ISODD)
+        TMP2 = FTField(n, ISODD)
+        tmp1 = Field(m)
+        tmp2 = Field(m)
+        tmp3 = Field(m)
+        ifft = InverseFFT(TMP1, m)
+        fft  = ForwardFFT(tmp1, n)
+
+        # ---- assemble ----
+        return new{n,
+                   ISODD,
+                   M,
+                   typeof(TMP1),
+                   typeof(tmp1),
+                   typeof(ifft),
+                   typeof(fft)}(TMP1,
+                                TMP2,
+                                tmp1,
+                                tmp2,
+                                tmp3,
+                                ifft,
+                                fft)
     end
 end
 
 # constructor
-LinearisedExTerm(n::Int, ISODD::Bool, mode::M) where {M <: AbstractLinearMode} = 
-    LinearisedExTerm{n, ISODD, M}()
+LinearisedExTerm(      n::Int,
+                   ISODD::Bool,
+                    mode::M;
+                 dealias::Symbol=:none) where {M <: AbstractLinearMode} =
+    LinearisedExTerm{n, ISODD, M}(; dealias=dealias)
 
 function Base.deepcopy_internal(x::LinearisedExTerm{n, ISODD, M}, 
                              dict::IdDict) where {n, ISODD, M}
     if !( haskey(dict, x) )
-        dict[x] = LinearisedExTerm{n, ISODD, M}()
+        dict[x] = LinearisedExTerm{n, ISODD, M}(; dealias=_dealias(x.ifft))
     end
     return dict[x]
 end
@@ -101,14 +127,24 @@ mutable struct LinearisedEquation{n,
     forcing::G
 end
 
-# outer constructor: main entry point
-function LinearisedEquation(n::Int,
-                            ν::Real,
-                            ISODD::Bool,
-                            mode::AbstractLinearMode,
-                            forcing=DummyForcing(n))
+"""
+    LinearisedEquation(n, ν, ISODD, mode, forcing=DummyForcing(n); dealias=:none)
+
+The tangent (`mode = TangentMode()`) or the adjoint (`AdjointMode()`) of the
+right-hand side of `ForwardEquation(n, ν, ISODD; dealias)`, about the state U.
+Call it as `L(t, U, V, dVdt)`, the right-hand side of the linearised modes of
+Flows.jl, or as `L(t, U, dUdt, V, dVdt)` in a coupled system. The tangent is the
+exact Jacobian of the right-hand side, and the adjoint is its exact transpose in
+`dot`, with or without dealiasing. Use the same `dealias` as the forward equation.
+"""
+function LinearisedEquation(      n::Int,
+                                  ν::Real,
+                              ISODD::Bool,
+                               mode::AbstractLinearMode,
+                            forcing=DummyForcing(n);
+                            dealias::Symbol=:none)
     imTerm = LinearTerm(n, ν, ISODD)
-    exTerm = LinearisedExTerm(n, ISODD, mode)
+    exTerm = LinearisedExTerm(n, ISODD, mode; dealias=dealias)
     LinearisedEquation{n,
                        ISODD,
                        typeof(mode),

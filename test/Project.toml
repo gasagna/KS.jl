@@ -1,0 +1,10 @@
+[deps]
+Flows = "d910d432-2c57-11e9-263c-df934de6853d"
+KS = "1355cabe-d8cf-525e-82e9-e661dd9cf1de"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+KS = {path = ".."}
+Flows = {url = "https://github.com/Davide-Lasagna-s-Lab/Flows.jl", rev = "rk8"}

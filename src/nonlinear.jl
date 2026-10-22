@@ -55,33 +55,86 @@ Flows.ImcA!(imTerm::LinearTerm{n},
 
 
 # ////// NONLINEAR TERM //////
-struct NonLinearExTerm{n, ISODD, FT<:AbstractFTField{n}, F<:AbstractField{n}}
-       V::FT      # temporary in Fourier space
-       u::F       # solution in physical space
-    ifft
-     fft
-    function NonLinearExTerm{n}(ISODD::Bool) where {n}
-        V = FTField(n, ISODD); u = Field(n)
-        fft, ifft = ForwardFFT(u), InverseFFT(V)
-        new{n, ISODD, typeof(V), typeof(u)}(V, u, ifft, fft)
+# number of modes m of the grid of the products. With :pad the grid has
+# 2(m + 1) ≥ 3n + 1 points, and the modes 1, …, n of the products are exact
+_gridmodes(n::Int, dealias::Symbol) = dealias === :pad ? cld(3n - 1, 2) : n
+
+# the option a term was built with, from its inverse transform, for deepcopy
+_dealias(::InverseFFT{n, m}) where {n, m} = m == n ? :none : :pad
+
+struct NonLinearExTerm{n, ISODD, FT<:AbstractFTField{n}, F<:AbstractField, IP, FP}
+       V::Tuple{FT, FT} # temporaries in Fourier space
+       u::Tuple{F, F}   # temporaries in physical space, on the grid of the products
+    ifft::IP            # inverse transform, n modes to the grid
+     fft::FP            # forward transform, grid to n modes
+    function NonLinearExTerm{n}(ISODD::Bool; dealias::Symbol=:none) where {n}
+        # ---- input checks ----
+        dealias in (:none, :pad) ||
+            throw(ArgumentError("dealias must be :none or :pad"))
+
+        # ---- temporaries and transforms ----
+        m    = _gridmodes(n, dealias)
+        VV   = (FTField(n, ISODD), FTField(n, ISODD))
+        uu   = (Field(m), Field(m))
+        fft  = ForwardFFT(uu[1], n)
+        ifft = InverseFFT(VV[1], m)
+
+        # ---- assemble ----
+        return new{n,
+                   ISODD,
+                   typeof(VV[1]),
+                   typeof(uu[1]),
+                   typeof(ifft),
+                   typeof(fft)}(VV,
+                                uu,
+                                ifft,
+                                fft)
     end
 end
 
-NonLinearExTerm(n::Int, ISODD::Bool) = NonLinearExTerm{n}(ISODD)
+NonLinearExTerm(n::Int, ISODD::Bool; dealias::Symbol=:none) =
+    NonLinearExTerm{n}(ISODD; dealias=dealias)
+
+# @inline function
+#     (exTerm::NonLinearExTerm{n, ISODD, FT})(t::Real,
+#                                             U::FT,
+#                                          dUdt::FT,
+#                                           add::Bool=false) where {n, ISODD, FT}
+#     _set_symmetry!(U)
+#     exTerm.ifft(U, exTerm.u)        # copy and inverse transform
+#     exTerm.u .= exTerm.u.^2         # square
+#     exTerm.fft(exTerm.u, exTerm.V)  # forward transform
+#     ddx!(exTerm.V)                  # differentiate
+
+#     # store and enforce symmetries
+#     add == true ? (dUdt .-= 0.5.*exTerm.V) : (dUdt .= .-0.5.*exTerm.V)
+
+#     return dUdt
+# end
 
 @inline function
     (exTerm::NonLinearExTerm{n, ISODD, FT})(t::Real,
                                             U::FT,
                                          dUdt::FT,
                                           add::Bool=false) where {n, ISODD, FT}
+    # enforce symmetry
     _set_symmetry!(U)
-    exTerm.ifft(U, exTerm.u)        # copy and inverse transform
-    exTerm.u .= exTerm.u.^2         # square
-    exTerm.fft(exTerm.u, exTerm.V)  # forward transform
-    ddx!(exTerm.V)                  # differentiate
+
+    # differentiate
+    ddx!(exTerm.V[1], U)
+
+    # transform to physical space
+    exTerm.ifft(U, exTerm.u[1])
+    exTerm.ifft(exTerm.V[1], exTerm.u[2])
+
+    # multiply in physical space
+    exTerm.u[1] .= exTerm.u[1] .* exTerm.u[2]
+
+    # go to spectral space again
+    exTerm.fft(exTerm.u[1], exTerm.V[1])
 
     # store and enforce symmetries
-    add == true ? (dUdt .-= 0.5.*exTerm.V) : (dUdt .= .-0.5.*exTerm.V)
+    add == true ? (dUdt .-= exTerm.V[1]) : (dUdt .= .- exTerm.V[1])
 
     return dUdt
 end
@@ -89,7 +142,7 @@ end
 function Base.deepcopy_internal(x::NonLinearExTerm{n, ISODD}, 
                              dict::IdDict) where {n, ISODD}
     if !( haskey(dict, x) )
-        dict[x] = NonLinearExTerm(n, ISODD)
+        dict[x] = NonLinearExTerm(n, ISODD; dealias=_dealias(x.ifft))
     end
     return dict[x]
 end
@@ -102,19 +155,37 @@ struct ForwardEquation{n,
                    imTerm::LIN
                   exTerm::NLIN
                forcing::G
-    function ForwardEquation{n}(ν::Real, ISODD::Bool, forcing::G) where {n, G}
-        exTerm = NonLinearExTerm(n, ISODD)
+    function ForwardEquation{n}(      ν::Real,
+                                  ISODD::Bool,
+                                forcing::G;
+                                dealias::Symbol=:none) where {n, G}
+        exTerm = NonLinearExTerm(n, ISODD; dealias=dealias)
         imTerm = LinearTerm(n, ν, ISODD)
         new{n, typeof(forcing), 
             typeof(imTerm), typeof(exTerm)}(imTerm, exTerm, forcing)
     end
 end
 
-ForwardEquation(n::Int,
-                ν::Real,
-                ISODD::Bool,
-                forcing::AbstractForcing=DummyForcing(n)) =
-                                           ForwardEquation{n}(ν, ISODD, forcing)
+"""
+    ForwardEquation(n, ν, ISODD, forcing=DummyForcing(n); dealias=:none)
+
+The right-hand side of u_t = -u u_x - u_xx - ν u_xxxx + forcing on [0, 2π), with
+n Fourier modes, in the odd subspace (`ISODD = true`) or in the full space. Call
+it as `eq(t, U, dUdt)`, the right-hand side of `flow(eq, RK8(U), ...)`, or split
+it with `splitexim(eq)` for the IMEX schemes.
+
+With `dealias = :none`, the default, the product u u_x is taken on the 2n + 2
+points of the grid, with aliasing. With `dealias = :pad` it is taken on
+2(m + 1) ≥ 3n + 1 points. The model is then the exact Galerkin truncation, and it
+is equivariant under all translations. The standard form on [0, L) has
+ν = (2π/L)², see the README.
+"""
+ForwardEquation(      n::Int,
+                      ν::Real,
+                  ISODD::Bool,
+                forcing::AbstractForcing=DummyForcing(n);
+                dealias::Symbol=:none) =
+    ForwardEquation{n}(ν, ISODD, forcing; dealias=dealias)
 
 # split into implicit and explicit terms
 function splitexim(eq::ForwardEquation{n}) where {n}
