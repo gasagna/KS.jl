@@ -11,7 +11,7 @@ primitive type WaveNumber <: Signed 64 end
 
 # constructor
 WaveNumber(k::Int64) = reinterpret(WaveNumber, k)
-Int64(k::WaveNumber) = reinterpret(Int64, k)
+Base.Int64(k::WaveNumber) = reinterpret(Int64, k)
 
 # This allows the REPL to show values of type WaveNumber
 Base.show(io::IO, k::WaveNumber) = print(io, Int64(k))

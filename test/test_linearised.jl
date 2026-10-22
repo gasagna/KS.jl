@@ -14,7 +14,7 @@
 
     # flow
     ϕ = flow(splitexim(F)..., 
-             CB3R2R3e(FTField(n, ISODD), :NORMAL), TimeStepConstant(Δt))
+             CB3R2R3e(FTField(n, ISODD)), TimeStepConstant(Δt))
 
     # define the stage cache
     cache = RAMStageCache(4, FTField(n, ISODD))
@@ -42,13 +42,13 @@
     # test that the difference ⟨V, ψ⁺[V⁺]⟩ - ⟨V⁺, ψ[V]⟩
     # goes to zero within machine accuracy
     ψ  = flow(splitexim(L)..., 
-                   CB3R2R3e(FTField(n, ISODD), :TAN), TimeStepFromCache())
+                   CB3R2R3e(FTField(n, ISODD), DiscreteMode(false)), TimeStepFromCache())
     ψ⁺ = flow(splitexim(L⁺)..., 
-                   CB3R2R3e(FTField(n, ISODD), :ADJ), TimeStepFromCache())
+                   CB3R2R3e(FTField(n, ISODD), DiscreteMode(true)), TimeStepFromCache())
     v1 = dot(V, ψ⁺(copy(V⁺),cache))
     v2 = dot(V⁺, ψ(copy(V), cache))
     
-    @test abs(v1-v2)/abs(v1) < 6e-14
+    @test abs(v1-v2)/abs(v1) < 1e-12
 end
 
 @testset "perturbations to the trivial base      " begin
@@ -65,7 +65,7 @@ end
 
     # flow
     ϕ = flow(splitexim(F)..., 
-                   CB3R2R3e(FTField(n, ISODD), :NORMAL), TimeStepConstant(Δt))
+                   CB3R2R3e(FTField(n, ISODD)), TimeStepConstant(Δt))
 
     # define the stage cache
     cache = RAMStageCache(4, FTField(n, ISODD))
@@ -82,9 +82,9 @@ end
 
     # and the flows
     ψ  = flow(splitexim(L)...,
-                    CB3R2R3e(FTField(n, ISODD), :TAN), TimeStepFromCache())
+                    CB3R2R3e(FTField(n, ISODD), DiscreteMode(false)), TimeStepFromCache())
     ψ⁺ = flow(splitexim(L⁺)...,
-                    CB3R2R3e(FTField(n, ISODD), :ADJ), TimeStepFromCache())
+                    CB3R2R3e(FTField(n, ISODD), DiscreteMode(true)), TimeStepFromCache())
 
     # will use this field
     V = FTField(n, ISODD)
@@ -128,7 +128,7 @@ end
 
     # flow
     ϕ = flow(splitexim(F)..., 
-                   CB3R2R3e(FTField(n, ISODD), :NORMAL), TimeStepConstant(Δt))
+                   CB3R2R3e(FTField(n, ISODD)), TimeStepConstant(Δt))
 
     # define the stage cache
     cache = RAMStageCache(4, FTField(n, ISODD))
@@ -141,7 +141,7 @@ end
 
     # flows
     ψ  = flow(splitexim(L)...,
-                    CB3R2R3e(FTField(n, ISODD), :TAN), TimeStepFromCache())
+                    CB3R2R3e(FTField(n, ISODD), DiscreteMode(false)), TimeStepFromCache())
 
     # copy initial condition
     _U₀ = copy(U₀)

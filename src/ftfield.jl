@@ -8,13 +8,14 @@ export AbstractFTField,
        ddx!,
        normdiff,
        shift!,
+       reflect!,
        diffmat,
        minnormdiff,
        grow,
        shrink,
        toresol
 
-import LinearAlgebra: dot, norm
+import LinearAlgebra: dot, norm, reflect!
 import SparseArrays: spdiagm
 
 # ////// ABSTRACT TYPE FOR SOLUTION IN FOURIER SPACE //////
@@ -88,6 +89,15 @@ function _write(data::AbstractVector, input::AbstractVector, ::Val{false})
 end
 
 # ////// outer constructors //////
+"""
+    FTField(n, ISODD, fun=k->0)
+
+The Fourier coefficients U_k = fun(k), k = 1, …, n, of the real field
+u(x) = Σ_{0<|k|≤n} U_k e^{ikx} on [0, 2π), with U_{-k} = conj(U_k) and zero mean.
+`U[WaveNumber(k)]` is U_k. The linear index runs over the degrees of freedom,
+(Re U_1, Im U_1, …, Re U_n, Im U_n) in the full space (`ISODD = false`) and
+(Im U_1, …, Im U_n) in the odd space, where u = -2 Σ_k Im U_k sin(kx).
+"""
 FTField(n::Int, isodd::Bool, fun=k->0) =
     FTField(Complex{Float64}[fun(k) for k in 1:n], isodd)
 
@@ -152,6 +162,15 @@ Base.similar(U::FTField{n, ISODD}) where {n, ISODD} = FTField(n, ISODD)
 Base.copy(U::FTField) = (V = similar(U); V .= U; V)
 Base.parent(U::FTField) = U.data
 
+# The default deepcopy keeps dptr as it is, a pointer into the data of U, so that
+# writes to the copy would go to U. This one builds a new pointer, into the new data
+function Base.deepcopy_internal(U::FTField{n, ISODD}, dict::IdDict) where {n, ISODD}
+    haskey(dict, U) && return dict[U]
+    V = FTField{n, ISODD}(U.data[2:n+1])
+    dict[U] = V
+    return V
+end
+
 function grow(U::FTField{n, ISODD}, m::Int) where {n, ISODD}
     if m < n
         throw(ArgumentError("cannot grow to smaller resolution"))
@@ -177,6 +196,13 @@ Base.objectid(U::FTField) = objectid(U.data)
 Base.mightalias(A::FTField, B::FTField) = Base.mightalias(A.data, B.data)
 
 # ////// inner product and norm //////
+"""
+    dot(U, V)
+
+The inner product Σ_k Re(U_k conj(V_k)) = (1/4π) ∫ u v dx over [0, 2π). In the
+full space it is the Euclidean product of the degrees of freedom. `norm(U)` is
+sqrt(dot(U, U)).
+"""
 function dot(U::FTField{n, ISODD, T},
              V::FTField{n, ISODD, T}) where {n, ISODD, T}
     out = zero(T)
@@ -192,26 +218,88 @@ norm(U::FTField) = sqrt(dot(U, U))
 normdiff(U::FTField{n}, V::FTField{n}) where {n} =
     sqrt(real(sum(abs2(U[k] - V[k]) for k in wavenumbers(n))))
 
-# Return minimum distance between two fields. This return the distance and 
-# the shift that needs to be applied on the first field to obtain the minimum 
-# distance. This is obtained by calculating the distance for "N" shifted 
-# fields and returning the minimum. 
-function minnormdiff(U::FTField{n}, V::FTField{n}, N::Int=20) where {n}
-    dmin = normdiff(U, V)
-    imin = 0
-    for i = 1:N
-        # by shifting N times by 2π/N we leave U unchanged at the exit
-        shift!(U, 2π/N)
-        d = normdiff(U, V)
-        if d < dmin
-            dmin = d
-            imin = i
+"""
+    minnormdiff(U, V, N=20; method=:grid) -> (d, (s,))
+
+The shift s that brings `U` closest to `V`, with d = |shift!(U, s) - V| the
+norm of the difference (`normdiff`). Both methods start from the N shifts
+s = 2πj/N.
+
+With `method = :grid`, the default, s is the best of the N shifts. The search
+shifts `U` in place N times, which leaves `U` as it was up to round-off.
+
+With `method = :newton`, Newton's method refines the best of the N shifts
+toward the local minimum next to it. That shift is kept when the refinement
+does not lower d, so d never exceeds its value there. Neither argument
+changes. The global minimum can sit next to another of the N shifts, which
+happens less often for larger N. Take N ≥ 8n.
+"""
+function minnormdiff(     U::FTField{n},
+                          V::FTField{n},
+                          N::Int=20;
+                     method::Symbol=:grid) where {n}
+    # ---- input checks ----
+    method in (:grid, :newton) ||
+        throw(ArgumentError("method must be :grid or :newton"))
+
+    # ---- grid search, shifting U in place ----
+    if method === :grid
+        dmin = normdiff(U, V)
+        imin = 0
+        for i = 1:N
+            # by shifting N times by 2π/N we leave U unchanged at the exit
+            shift!(U, 2π/N)
+            d = normdiff(U, V)
+            if d < dmin
+                dmin = d
+                imin = i
+            end
         end
+        return dmin, (imin * 2π/N, )
     end
-    return dmin, (imin * 2π/N, )
+
+    # ---- C(s), its derivatives, and the distance without cancellation ----
+    # |shift!(U, s) - V|² = |U|² + |V|² - 2C(s), C(s) = Σ_k Re(U_k conj(V_k) e^{iks}).
+    # They take the shift as an argument, so that the shift is not boxed below
+    C(σ)    = sum(real(U[k]*conj(V[k])*cis(k*σ))      for k in wavenumbers(n))
+    C′(σ)   = sum(real(im*k*U[k]*conj(V[k])*cis(k*σ)) for k in wavenumbers(n))
+    C″(σ)   = sum(real(-k^2*U[k]*conj(V[k])*cis(k*σ)) for k in wavenumbers(n))
+    dist(σ) = sqrt(sum(abs2(U[k]*cis(k*σ) - V[k])     for k in wavenumbers(n)))
+
+    # ---- best of the N shifts ----
+    j  = argmax(i -> C(2π*i/N), 0:N-1)
+    s₀ = 2π*j/N
+
+    # ---- Newton's method on C'(s) = 0, from the best of the N shifts ----
+    s = s₀
+    for _ in 1:30
+        d2 = C″(s)
+        d2 < 0 || break # not near a maximum, as when V = 0
+        δ  = -C′(s)/d2
+        s += δ
+        abs(δ) < 1e-14 && break
+    end
+
+    # ---- keep the best of the N shifts when Newton's method ended above it ----
+    # a step from a point where C is barely concave can jump to a lower maximum
+    d  = dist(s)
+    d₀ = dist(s₀)
+    if d₀ < d
+        s = s₀
+        d = d₀
+    end
+
+    return d, (mod(s, 2π), )
 end
 
 # ////// shifts and differentiation //////
+"""
+    shift!(U, s) -> U
+
+Translate `U` in place, u(x) → u(x + s), that is U_k → U_k e^{iks}. It preserves
+`dot`, and its generator is `ddx!`. In the odd space only s = 0 and s = π keep
+a field odd.
+"""
 function shift!(U::AbstractFTField{n}, s::Real) where {n}
     if s != 0
         @inbounds @simd for k in wavenumbers(n)
@@ -221,7 +309,28 @@ function shift!(U::AbstractFTField{n}, s::Real) where {n}
     return U
 end
 
-# modify first argument
+"""
+    reflect!(U) -> U
+
+Reflect `U` in place, u(x) → -u(-x), that is U_k → -conj(U_k). The equation
+is equivariant under the reflection, and odd fields do not change.
+"""
+function reflect!(U::AbstractFTField{n}) where {n}
+    # ---- U_k → -conj(U_k), the real parts change sign ----
+    @inbounds for k in wavenumbers(n)
+        U[k] = -conj(U[k])
+    end
+
+    return U
+end
+
+"""
+    ddx!(V, U) -> V
+    ddx!(U) -> U
+
+The derivative ∂x u, V_k = ik U_k. It is the generator of `shift!`, the
+derivative of shift!(U, s) at s = 0.
+"""
 ddx!(iKU::AbstractFTField{n}, U::AbstractFTField{n}) where {n} =
     (@inbounds for k in wavenumbers(n)
          iKU[k] = im*(k*U[k])
